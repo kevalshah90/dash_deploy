@@ -1,0 +1,106 @@
+{% extends "base.html" %} {% block content %}
+<div class="container mt-5 mb-5 col-lg-6 col-md-10">
+  <div class="card">
+    <div class="card-header text-center">
+      <h2>Profile</h2>
+    </div>    
+    <div class="card-body mx-lg-5 mx-md-3">
+      {% with messages = get_flashed_messages(with_categories=true) %} {% if messages %} {% for
+        category, message in messages %} {% if category == 'success' %}
+        <div class="alert alert-success">{{ message }}</div>
+        {% else %}
+        <div class="alert alert-danger">{{ message }}</div>
+        {% endif %} {% endfor %} {% endif %} {% endwith %}
+      <form method="POST" action="/updateProfile">
+        <div class="form-group">
+          <label>Full Name</label>
+          <input
+            class="form-control edit"
+            type="text"
+            name="fullname"
+            placeholder="Full Name"
+            autofocus=""
+            required
+            value="{{user.fullname}}"
+            disabled
+          />
+        </div>
+        <div class="form-group">
+          <label class="label">Email</label>
+          <input
+            class="form-control"
+            type="email"
+            name="email"
+            placeholder="Email"
+            autofocus=""
+            disabled
+            value="{{user.email}}"
+          />
+          {% if user.emailverified %}
+          <label style="color:greenyellow; padding-left: 5px;">verified</label>
+          {% else %}
+          <a href="{{ url_for('auth.resendVerify') }}" style="color:red; padding-left: 5px;">Not verified! send link?</a>
+          {% endif %}
+        </div>
+        <div class="form-group">
+          <label class="label">Company Name</label>
+          <input
+            class="form-control edit"
+            type="text"
+            name="name"
+            placeholder="Company Name"
+            autofocus=""
+            required
+            value="{{user.name}}"
+            disabled
+          />
+        </div>
+        <div class="form-group">
+          <label class="label">Job Title</label>
+          <input
+            class="form-control edit"
+            type="text"
+            name="jobtitle"
+            placeholder="Job Title"
+            autofocus=""
+            required
+            value="{{user.jobtitle}}"
+            disabled
+          />
+        </div>
+
+        <div class="form-group">
+          <label class="label">Country</label>
+          <select id="selectoption" class="form-control edit" name="country" disabled>            
+            <option value="USA" {% if user.country == 'USA' %} selected {% endif %}>USA</option>            
+            <option value="Canada"  {% if user.country == 'Canada' %} selected {% endif %}>Canada</option>
+            <option value="India"  {% if user.country == 'India' %} selected {% endif %}>India</option>
+          </select>
+        </div>
+
+        <div class="form-group text-center">
+          <button class="btn btn-primary w-25" id="editBtn">Edit</button>
+          <button class="btn btn-primary w-25 d-none" id="updateBtn">Update</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<script>
+  document.getElementById("editBtn").addEventListener("click", function(event){
+    debugger;
+    var updateB = document.getElementById('updateBtn');    
+    event.target.classList.add('d-none');
+    updateB.classList.remove("d-none");
+    event.preventDefault();
+
+    var elements = document.getElementsByClassName("edit");
+
+    for(var i = elements.length - 1; i >= 0; --i)
+    {
+        elements[i].disabled = false;
+    }
+    return false;
+});
+</script>
+{% endblock %}

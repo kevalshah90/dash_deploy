@@ -1,0 +1,12 @@
+{
+  "type": "service_account",
+  "project_id": "stroom-data-exploration",
+  "private_key_id": "ebf3ef8e9bf0025d6b225c2a8bd3a0cb10408196",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCtVJ/JdeFjhlu+\nizSyQ7vWQqJbQ6L9RaPKyy6iZZ7UvF/P750Wtyt0rXGBpcP6/y1+OcfaYhC8tw6p\n4/SrQJq/uunzMzz3/SvoCtscPswmIcrsKlpHLhCJvKEc5v3/X4C56VohA6Ifn1gn\nH8CPXeSjaa86Zqz1nFZnaU0+f+BuNtoKJqch43b3f808s7nwW2MIJK8rvNCRf6UL\nDFnkWXEf0xd9pYgPfGKwRvgXIApD/5Ui5mCINjlfYc2PsyAmRjTvLOCUGozfGt1c\nIbsFoRDVl91rU+milVFyBonEJlCPCbqCGX/e9id+H2ugPBOtRcA+r5r8oLRz0aBt\nhnojgtWzAgMBAAECggEARe7g0V3YZFlvZr+vsUUW4mncK8psVpfkcAvucuNhZB/k\n4HajAOlChT79jvucyQZwCn+xnPD4I8wQBIfOzdGxHi6B+ffwX3YsYuEOaqUDpVb5\nErQ73IA/d/M9ZfXlAUY9H8WA8dUPcobOAGsVPEL73trjMkL/AdHkIrEf01mw6YZa\nDDDYzWvwijGXD/eUwJHgnbldEvA8EaD5ETzJZlS2Qvb3qfePWbSHRAgVq72n8t7d\nUdoz7gzkcthVQZ4+gDrdDOPiFOkARR9pZY8ZHhD414U4DuQXeiy+mzcCu7+FMkaL\nCo6GtGIdOeZ8MibslaKshBqmavA1M3g57O5PrwxlkQKBgQDWiUJEZJVz1RUgkzoA\neUfRGANNzAYVXK40i4rd+m0iXdKAOxRHDpY1ZVQ0tJQA6HeXtaXtg5+SipSLd0q9\nTiSlao1EHsezKaoaplFUTRJh+p9B5z++Gb4StrrWJO8Z4oyXh+p5cJPM0vIT8RTa\n1Fh0DfRGlxeDfRb/akIUxKzSrQKBgQDO1JwS+uk6PZntfnusVeHGpfhDw8UR0aZA\nvx13n6oUeljIqmtd63cetPe+D9CauxmKcQg9fuqzxLQVyv+wQORNeQkItbv7Fu/a\n7JF26qYffGam+lP30CI7HHG7OWvVW009JUVWrr1Ekz9Aosnna4NXUQ6RFa0gvZgN\nYISKQ2+13wKBgGnkPg08CHiwCEmX4d0x/7y5OYhA2A/bOzE8X0LJxOxdmvUoNA4O\nqR2Z8kJBj3wTQlRjmI7vlOfj9wYPz5g45eWv/iJNfwxz2D5nMWWG1Tf/WHRTDCds\n1WCvSPFCMbJ5HCP/NkDSzGEhDdPB/yU0AqTl7liZY0XHjH5tmEhf+13RAoGBAJT9\nEGSXu/PJNh2fNCVjRB0dp2XhGw+H7vPK98YZDKJts5DxOiBQouFKyP9vUvxy9KYG\nYEI0L4tJkdP1BBSJ2it4mapdh0kLL8KLEQoRY5NgwG1d+6iSlGXySnbsmSH6//ug\n4n7bptlEHJdJ7Jk4mEcIy651Z94i1Ool8bPLeigPAoGBAL56wJYtr94exdWGyFsP\nZTrlefMsLqEBwsZ4ilFnc7uGAjGDh5PJLyIYxazoSaKBaDD9RhtaJBgOG4mZdW0D\ngPBF1qFShd9NqNyPIXQ+7GA3cF6Sr+F8zl+QzBKptpygABc6pmPMfiMyDOlWbGpx\ndYEjOWmeK1DlZnfDfqcn3Pr8\n-----END PRIVATE KEY-----\n",
+  "client_email": "stroom-service-account@stroom-data-exploration.iam.gserviceaccount.com",
+  "client_id": "112693348070239395346",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/stroom-service-account%40stroom-data-exploration.iam.gserviceaccount.com"
+}

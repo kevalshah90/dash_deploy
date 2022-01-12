@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Stroom App</title>
+    <!-- <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.2/css/bulma.min.css" /> -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootswatch/4.5.2/slate/bootstrap.min.css" />
+  </head>
+
+  <body>
+    <section>
+      <div>
+        <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+          <a class="navbar-brand" href="#">Stroom</a>
+          <button
+            class="navbar-toggler"
+            type="button"
+            data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent"
+            aria-expanded="false"
+            aria-label="Toggle navigation"
+          >
+            <span class="navbar-toggler-icon"></span>
+          </button>
+
+          {% if current_user.is_authenticated %}
+          <div class="collapse navbar-collapse" id="navbarSupportedContent">
+            <ul class="navbar-nav ml-auto">
+              {% if request.path == '/dashboard' %}
+              <li class="nav-item active">
+                {% else %}
+                <li class="nav-item">
+                  {% endif %}
+                <a href="/dashboard2" class="nav-link"> Dashboard </a>
+              </li>
+              <li class="nav-item">
+                <div class="dropdown" style="margin-top: 2px;">
+                  <button class="btn btn-primary dropdown-toggle" type="button" data-toggle="dropdown">Account
+                  <span class="caret"></span></button>
+                  <ul class="dropdown-menu dropdown-menu-right">
+                    {% if request.path == '/profile' %}
+                    <li class="nav-item active">
+                      {% else %}
+                      <li class="nav-item">
+                        {% endif %}
+                      <a href="{{ url_for('main.profile') }}" class="nav-link"> Profile </a>
+                    </li>
+                    {% if request.path == '/changePass' %}
+                    <li class="nav-item active">
+                      {% else %}
+                      <li class="nav-item">
+                        {% endif %}
+                      <a href="{{ url_for('main.changePass') }}" class="nav-link"> Change Password </a>
+                    </li>
+                    <li class="nav-item">
+                      <a href="{{ url_for('auth.logout') }}" class="nav-link"> Logout </a>
+                    </li>
+                  </ul>
+                </div>
+              </li>
+
+        </div>
+          {% endif %}
+
+          {% if not current_user.is_authenticated %}
+          <div class="collapse navbar-collapse" id="navbarSupportedContent">
+            <ul class="navbar-nav ml-auto">
+              {% if request.path == '/login' or request.path == '/'%}
+              <li class="nav-item active">
+                {% else %}
+                <li class="nav-item">
+                  {% endif %}
+                <a href="{{ url_for('auth.login') }}" class="nav-link"> Login </a>
+              </li>
+              {% if request.path == '/signup'%}
+              <li class="nav-item active">
+                {% else %}
+                <li class="nav-item">
+                  {% endif %}
+                <a href="{{ url_for('auth.signup') }}" class="nav-link"> Sign Up </a>
+              </li>
+              {% endif %}
+            </ul>
+          </div>
+        </nav>
+      </div>
+
+      <div>
+        <div class="">{% block content %} {% endblock %}</div>
+      </div>
+    </section>
+  </body>
+  <script
+    src="https://code.jquery.com/jquery-3.5.1.slim.min.js"
+    integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj"
+    crossorigin="anonymous"
+  ></script>
+  <script
+    src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/js/bootstrap.bundle.min.js"
+    integrity="sha384-ho+j7jyWK8fNQe+A12Hb8AhRq26LrZ/JpcUGGOn+Y7RsweNrtN/tE3MoK7ZeZDyx"
+    crossorigin="anonymous"
+  ></script>
+</html>

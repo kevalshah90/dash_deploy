@@ -1,0 +1,473 @@
+/* body {
+  background-color: #f5f5f5;
+  opacity: 1.0;
+} */
+
+.tabs {
+  background-color: #444;
+  color: #adb5bd;
+  vertical-align: middle;
+  font-size: 0.9375rem
+}
+
+.map-style {
+  padding: 1% 0px 0px 0px;
+  margin-left: 71px;
+  position: absolute;
+
+}
+
+.prop-style {
+  padding: 0% 0px 0px 1em;
+  margin-top: -80%;
+  margin-left: 1em;
+  position: relative;
+}
+
+.table-style {
+  padding: 38px 0px 0px 33px;
+  margin-top: 18%;
+  position: relative;
+  width: 100%;
+}
+
+.vacancy-style {
+  padding: 2% 0px 0px 2.4em;
+}
+
+.price-style {
+  padding: 5% 0px 0px 0.4em;
+}
+
+.velocity-style {
+  padding: 5% 0px 0px 0.4em;
+}
+
+.market-style {
+  padding: 5% 0px 0px 0.4em;
+}
+
+.date-picker-range {
+  width: 300px;
+}
+
+.adjust-rent {
+  margin-top : -2em;
+  margin-left: 8em;
+  float: left;
+  height: 250px;
+  width: 50%
+}
+
+.lease-button {
+  margin-top: 2.5%;
+}
+
+button.export {
+  font-size: 15px;
+
+}
+
+
+div#graph-area {
+  padding-left: 3em;
+}
+
+/* Year Built and Renovated */
+/* div#Renovated
+{
+  width: 40%;
+}
+
+div#Built
+{
+  width: 40%;
+} */
+
+input#built-input {
+  width: 60% !important;
+}
+
+/* Portfolio Tab */
+.metrics2-table {
+  width: 140%;
+}
+
+#model-radio label:nth-child(1) {
+  margin-right: 10px;
+}
+
+/* Question mark, tooltip, helper text css */
+.tenant-tooltip {
+  padding: 0rem;
+}
+
+.opex-tooltip {
+  padding: 0rem;
+}
+
+.p-5 {
+  padding: 0rem !important;
+}
+
+.asset-style {
+  width: 49%;
+  margin-top: 3%;
+  margin-left: 1%;
+  float: right
+}
+
+.tornado-style {
+  width: 49%;
+  margin-top: 3%;
+  margin-left: 0%;
+  float: left
+}
+
+
+div#model-radio {
+  margin-left: 0 !important;
+  margin-bottom: 50px;
+}
+
+.input-group {
+  width: auto;
+  margin-bottom: 15px !important;
+  float: none !important;
+  margin-left: 0 !important;
+  margin-top: 0!important;
+}
+
+label {
+  margin-right: 5px !important;
+}
+
+div#address-deal-dropdown {
+  width: 40% !important;
+  margin-left: 0 !important;
+}
+
+.input-group label {
+  flex: 0 0 100%;
+}
+
+.input-group-prepend {
+  margin-left: 0 !important;
+  width: auto !important;
+  height: auto!important;
+}
+
+.Select-control {
+  width: calc(100% - 10px) !important;
+  height: 48px !important;
+  margin-left: 0 !important;
+  border-radius: 0;
+  flex: 1 1 auto;
+}
+
+.deal-style {
+  width: 115% !important;
+  font-size: 1.08em !important;
+}
+
+div#asset-class {
+  flex: 1 1 auto;
+  width: auto!important;
+}
+
+.form-control {
+  margin-right: 10px;
+  border-radius: 0;
+}
+
+div#date-picker-deal {
+  margin-right: 0px;
+  margin-bottom: 0!important;
+}
+
+div#lease-type-deal {
+  flex: 1 1 auto;
+  width: auto!important;
+}
+
+div#beds {
+  width: 35%;
+}
+
+div#bath {
+  width: 25%;
+}
+
+.justify-content-between .input-group {
+  width: 100% !important;
+}
+
+.deal-style h2 {
+  margin-left: 0 !important;
+}
+
+.row.tabs_div {
+  margin: 0;
+  padding-left: 0%;
+}
+
+.row.header {
+  margin: 0;
+}
+
+#page-content {
+  margin-left: 0 !important;
+}
+.monthly-rent,
+.assessed-value,
+.total-sq-ft,
+.calc-cap-rate {
+  margin-left: 0 !important;
+}
+
+
+/* input#tenant-name-mf {
+  width: 36%;
+} */
+
+
+div#date-picker-deal-mf {
+  margin-right: 30px;
+  margin-bottom: 10px!important;
+  height: 38px;
+  width: 60px;
+}
+
+div#date-picker-unit-mf {
+  margin-right: 30px;
+  margin-top: 10px!important;
+  height: 30px;
+  width: 60px;
+}
+
+#tenant-industry-mf {
+  width: 60%;
+}
+
+#tenant-credit-mf {
+  width: 65% !important;
+}
+
+/* #tenant-renewal-mf {
+  width: 10% !important;
+} */
+
+#lease-type-deal-mf {
+  width: 52% !important;
+}
+
+input#vacancy-loss-mf {
+  width: 52% !important;
+  padding-top: 4px;
+}
+
+input#free-month-deal-mf {
+  width: 52% !important;
+}
+
+
+input#net {
+  width: 100% !important;
+  margin-left: 0 !important;
+}
+
+div#loan-date {
+  margin-right: 10px;
+}
+
+div#model-radio input[type="radio"] {
+  padding-right: 5px;
+}
+
+div#asset-type {
+
+  flex: 1 1 auto;
+  width: auto!important;
+}
+
+input#loan-lender {
+  margin-right: 10px;
+}
+
+button#lease-button {
+  margin-top: 5% !important;
+}
+
+div#model-radio label:nth-of-type(1) {
+  margin-right: 12px !important;
+}
+
+
+.input-group-text {
+    border-radius: 0;
+
+}
+
+
+.Select-placeholder, .Select--single > .Select-control .Select-value {
+    line-height: 46px;
+}
+
+div#loan-date {
+    width: auto!important;
+    margin-left: 0!important;
+    margin-right: 10px!important;
+}
+
+.SingleDatePickerInput__withBorder {
+    border-radius: 0;
+}
+
+div#tenant-industry {
+    flex: 1 1 auto;
+
+    height: 48px;
+}
+
+div#tenant-credit {
+    flex: 1 1 auto;
+    width: auto!important;
+}
+
+div#tenant-tooltip {
+  position: absolute;
+  left: 14%;
+}
+div#opex-tooltip {
+  position: absolute;
+  left: 31%;
+}
+div#disc-tooltip {
+  position: absolute;
+  left: 28%;
+}
+.dash-spreadsheet-menu {
+    justify-content: flex-end;
+}
+
+.dash-spreadsheet-menu > * {
+    padding-right: 0;
+}
+
+.rent-block {
+  margin-top: 32%;
+  width: 51%;
+}
+
+
+.financing-block {
+  margin-top: -54%;
+  margin-left: 51%;
+}
+
+.stablization-block {
+  margin-left: -80%;
+  margin-top: 43%;
+}
+
+.vacancy-style .form-control {
+    margin: 0;
+}
+
+.label-holder {
+    display: flex;
+    align-items: center;
+    width: 180%;
+}
+
+div#bldg-select {
+  width: 75%;
+}
+
+div#market-select {
+  width: 50%;
+  margin-bottom: 18%;
+  font-size: 13px;
+}
+
+input#median {
+  width: 20%;
+  font-size: large;
+}
+
+input#vacancy {
+  width: 15%;
+  font-size: large;
+}
+
+input#price {
+  width: 40%;
+  font-size: large;
+}
+
+input#irr {
+  width: 10%;
+}
+
+input#coc {
+  width: 10%;
+}
+
+input#ary {
+  width: 10%;
+}
+
+
+/* Comps Tab */
+div#prop-type {
+  margin-left: 7em;
+  margin-top: -2em;
+  width: 40%;
+  align-items: center;
+}
+
+div#deal-type {
+  margin-left: 7em;
+  margin-top: -2em;
+  align-items: center;
+}
+
+div#bldg-type {
+  margin-left: 7em;
+  margin-top: -2em;
+  align-items: center;
+}
+
+div#lease-type {
+  height: 44px;
+  width: 39%;
+  margin-top: -2em;
+  margin-left: 6em;
+  align-items: center;
+}
+
+div#ameneties {
+  width: 50%;
+  font-size: 110%;
+  height: 40px;
+  margin-top: 1.5%;
+}
+
+div#asking-rent-slider {
+  height: 70px;
+  width: 50%;
+  margin-top: 1%;
+  white-space: nowrap;
+  display: inline-block;
+  resize: vertical;
+}
+
+
+/* Analysis Tab */
+.summary {
+
+  width: 30em;
+  margin-left: 28em;
+  margin-top: -12.5em;
+
+}
