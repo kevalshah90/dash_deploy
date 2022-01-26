@@ -7,6 +7,7 @@ import pandas as pd
 import dash
 from dash.dependencies import Input, Output, State
 from dash import dcc
+import dash_bootstrap_components as dbc
 from dash import html
 #import dash_design_kit as ddk
 import plotly as py
@@ -33,12 +34,48 @@ application.layout = html.Div([
                                                                      "margin-top":"30px"}),
 
                             html.Div(
-                                html.Img(src='https://stroom-images.s3.us-west-1.amazonaws.com/STROOM-logo-white.png',height="100%")
-                                ,style={"float":"right","width":"170px","height":"100px","margin-top":"-14px"}),
+
+                                html.Img(src='https://stroom-images.s3.us-west-1.amazonaws.com/STROOM-logo-black.png',height="100%"),
+                                style={"float":"right",
+                                       "width":"170px",
+                                       "height":"100px",
+                                       "margin-top":"-84px"
+                                       }
+                            ),
+
+                            html.Div(
+
+                                [
+                                    html.H4("Market Intelligence", style={"textAlign":"center"}),
+                                    html.Hr(),
+                                    dbc.Nav(
+                                        [
+                                            dbc.NavLink("Comps", href="/comps", active="partial"),
+                                            dbc.NavLink("Market", href="/market", active="partial"),
+                                            dbc.NavLink("Deals", href="/deals", disabled=True),
+
+                                        ],
+                                        vertical=True,
+                                        fill=True,
+                                        pills=True,
+                                    ),
+                                ],
+
+                                style = {
+                                    "position": "fixed",
+                                    "top": 0,
+                                    "left": 0,
+                                    "bottom": 0,
+                                    "width": "12rem",
+                                    "padding": "1rem 1rem",
+                                    "background-color": "#f8f9fa",
+                                },
+
+                            ),
 
                             dcc.Location(id='url'),
 
-                            html.Div(id='page-content', style={'margin-left': '2%'}),
+                            html.Div(id='page-content'),
 
                             # Store component
                             dcc.Store(id="comps-store", storage_type="local"),
@@ -46,17 +83,8 @@ application.layout = html.Div([
                             # Store component for graphs
                             dcc.Store(id="analysis-store", storage_type="local"),
 
-                            # Store component for deal tab
-                            #dcc.Store(id="deal-store", storage_type="local"),
-
-                            # Store component for deal mf tab
-                            #dcc.Store(id="deal-mf-store", storage_type="local"),
-
-                            # Store component for home page
-                            dcc.Store(id="home-store", storage_type="local"),
-
                             ],
-                            className="row header"
+
                         )
 
 ])
@@ -71,14 +99,16 @@ application.layout = html.Div([
              )
 def display_content(pathname):
 
-    if pathname == '/home':
-        return home.layout
+    if pathname in ["/","/dashboard/","/dashboard2","/comps"]:
+        print(pathname)
+        return comps.layout
 
-    elif pathname == '/archive':
-        return archive.layout()
+    elif pathname == "/market":
+        return analysis.layout
 
     else:
-        return home.layout
+        return dash.no_update
+
 
 
 

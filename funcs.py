@@ -4,22 +4,45 @@ import pandas as pd
 pd.options.display.float_format = '{:.8f}'.format
 import os
 import google_streetview.api
+import random
+import string
+import usaddress
+import geopandas as gpd
+import pygeohash as gh
+from geolib import geohash
+import pygeodesy as pgd
 
+import http.client
+import urllib.parse
+
+# mapbox
 MAPBOX_KEY="pk.eyJ1Ijoia2V2YWxzaGFoIiwiYSI6ImNqbW1nbG90MDBhNTQza3IwM3pvd2I3bGUifQ.dzdTsg69SdUXY4zE9s2VGg"
 token = MAPBOX_KEY
 
-# Google maps api key
+# google maps api key
 import googlemaps
 gmaps = googlemaps.Client(key="AIzaSyC0XCzdNwzI26ad9XXgwFRn2s7HrCWnCOk")
+gkey = 'AIzaSyC0XCzdNwzI26ad9XXgwFRn2s7HrCWnCOk'
 
-# Walkscore
+# walkscore
 from walkscore import WalkScoreAPI
 api_key = '5ddeb512e4ac8046b46eca65a39ff9c5'
 walkscore_api = WalkScoreAPI(api_key = api_key)
 
+# aws
+import logging
+import boto3
+from botocore.exceptions import ClientError
+bucket = 'gmaps-images-6771'
+
+s3_client = boto3.client('s3',
+                         aws_access_key_id='AKIA2MQCGH6RW7TE3UG2',
+                         aws_secret_access_key='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')
+
+
+
 # Read SF Multi-Family data
 LeaseComp_sf_la_mf = pd.read_csv(os.getcwd() + "/data/LeaseComp_sf_la_mf_agg_v11_raw.csv")
-
 
 # Generate alphanumeric lease id and property ids
 def gen_ids(length):
@@ -27,7 +50,6 @@ def gen_ids(length):
     ids = ''.join(random.choices(string.ascii_letters + string.digits, k=length))
 
     return ids
-
 
 # Walkscore API Function
 def walkscore(lat, long, address, scores):
@@ -52,7 +74,6 @@ def walkscore(lat, long, address, scores):
         print(e)
         pass
 
-
 # Clean currency
 def clean_currency(x):
     """ If the value is a string, then remove currency symbol and delimiters
@@ -70,6 +91,13 @@ def clean_percent(x):
     if isinstance(x, str):
         return(x.replace('%', ''))
     return(x)
+
+# String to floats
+def str_num(x):
+
+    if isinstance(x, str):
+        return(x.replace(',', ''))
+    return(int(x))
 
 # Get Lat, Long
 def get_geocodes(address):
@@ -168,31 +196,45 @@ def nearby_places(addr):
         return None
 
 # Google Streetview image
-def streetview(lat, long):
+def streetview(lat, long, identifier):
 
-    # Define parameters for street view api
-    params = [{
-               'size': '600x300', # max 640x640 pixels
-               'location': (lat,long),
-               'heading': '151.78',
-               'pitch': '-0.76',
-               'key': gmaps
-    }]
+    try:
 
-    # Create a results object
-    results = google_streetview.api.results(params,
-                                            site_api='https://maps.googleapis.com/maps/api/streetview',
-                                            site_metadata='https://maps.googleapis.com/maps/api/streetview/metadata')
+        # Define parameters for street view api
+        params = [{
+                   'size': '600x300', # max 640x640 pixels
+                   'location': '{},{}'.format(lat,long),
+                   'heading': '151.78',
+                   'pitch': '-0.76',
+                   'key': gkey
+        }]
 
-    # Download images to directory 'downloads'
-    results.download_links('photos')
+        # Create a results object
+        results = google_streetview.api.results(params,
+                                                site_api='https://maps.googleapis.com/maps/api/streetview',
+                                                site_metadata='https://maps.googleapis.com/maps/api/streetview/metadata')
+
+        # Download images to directory 'downloads'
+        results.download_links('photos')
+
+        directory = os.getcwd() + "/photos/"
+
+        old_name = os.path.join(directory, results.metadata[0]['_file'])
+        new_name = os.path.join(directory, "{}_image.png".format(identifier))
+
+        os.rename(old_name, new_name)
+
+        # Add code to upload to S3 and access object using presigned urls
+        s3_client.upload_file(os.getcwd() + '/photos/{}_image.png'.format(identifier), bucket, 'property_images/{}_image.png'.format(identifier))
+
+        return "{}_image.png".format(identifier)
+
+    except Exception as e:
+            print("Exception", e)
+            pass
 
 
 # AWS Pre-signed URLs
-import logging
-import boto3
-from botocore.exceptions import ClientError
-
 def create_presigned_url(bucket_name, object_name, expiration=3600):
     """Generate a presigned URL to share an S3 object
 
@@ -202,18 +244,61 @@ def create_presigned_url(bucket_name, object_name, expiration=3600):
     :return: Presigned URL as string. If error, returns None.
     """
 
-    s3_client = boto3.client('s3',
-                             aws_access_key_id='AKIA2MQCGH6RW7TE3UG2',
-                             aws_secret_access_key='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')
-
     try:
         response = s3_client.generate_presigned_url('get_object',
                                                     Params={'Bucket': bucket_name,
                                                             'Key': object_name},
                                                     ExpiresIn=expiration)
+
     except ClientError as e:
         logging.error(e)
         return None
 
     # The response contains the presigned URL
     return response
+
+# Convert list to dict for JSON serialization
+def listToDict(lst):
+    if lst:
+        detailsDict = { i : lst[i] for i in range(0, len(lst) ) }
+        return detailsDict
+    else:
+        return None
+
+
+# ATTOM API - propety details
+def attom_api_avalue(addr1, addr2):
+
+    conn = http.client.HTTPSConnection("api.gateway.attomdata.com")
+
+    headers = {
+        'accept': "application/json",
+        'apikey': "98b25d7c38aeb771184dd885b92b5cb5",
+        }
+
+    addr1 = urllib.parse.quote(addr1)
+    addr2 = urllib.parse.quote(addr2)
+
+    url = "/propertyapi/v1.0.0/assessment/detail?address1={}&address2={}".format(addr1, addr2)
+
+    conn.request("GET", url, headers=headers)
+
+    res = conn.getresponse()
+    res = res.read()
+
+    return res
+
+# Geohash Proximity / nearest neighbor search
+def approximate_distance(geohash1, geohash2):
+    return pgd.geohash.distance_(geohash1, geohash2)
+
+def prox_mean(df, x, n=3):
+
+    #set number of closest geohashes to use for approximation with n
+    val = df.loc[df['geohash'] == x]
+
+    if not val.empty:
+        return val['value'].iloc[0]
+    else:
+        df['tmp_dist'] = df['geohash'].apply(lambda y: approximate_distance(y,x))
+        return df.nlargest(n, 'tmp_dist')['value'].mean()

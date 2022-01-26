@@ -5,8 +5,10 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Stroom App</title>
-    <!-- <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.2/css/bulma.min.css" /> -->
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootswatch/4.5.2/slate/bootstrap.min.css" />
+    <!-- <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootswatch/4.5.2/slate/bootstrap.min.css" /> -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootswatch@4.5.2/dist/sandstone/bootstrap.min.css" />
+
+
   </head>
 
   <body>
@@ -34,7 +36,7 @@
                 {% else %}
                 <li class="nav-item">
                   {% endif %}
-                <a href="/dashboard2" class="nav-link"> Dashboard </a>
+                <a href="/dashboard2" class="nav-link"> Home </a>
               </li>
               <li class="nav-item">
                 <div class="dropdown" style="margin-top: 2px;">
@@ -46,17 +48,17 @@
                       {% else %}
                       <li class="nav-item">
                         {% endif %}
-                      <a href="{{ url_for('main.profile') }}" class="nav-link"> Profile </a>
+                      <a href="{{ url_for('main.profile') }}" class="nav-link" style="color: #000000"> Profile </a>
                     </li>
                     {% if request.path == '/changePass' %}
                     <li class="nav-item active">
                       {% else %}
                       <li class="nav-item">
                         {% endif %}
-                      <a href="{{ url_for('main.changePass') }}" class="nav-link"> Change Password </a>
+                      <a href="{{ url_for('main.changePass') }}" class="nav-link" style="color: #000000"> Change Password </a>
                     </li>
                     <li class="nav-item">
-                      <a href="{{ url_for('auth.logout') }}" class="nav-link"> Logout </a>
+                      <a href="{{ url_for('auth.logout') }}" class="nav-link" style="color: #000000"> Logout </a>
                     </li>
                   </ul>
                 </div>

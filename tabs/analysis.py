@@ -170,7 +170,22 @@ layout = html.Div([
 
                             dbc.Card(
                                         [
-                                            dbc.CardHeader("Rent to Income"),
+                                            dbc.CardHeader("Median Home Value - County"),
+                                            dbc.CardBody(
+                                                [
+                                                    html.P(id="home-value", style={"font-size": "1.5em"}),
+                                                ]
+
+                                            ),
+                                        ],
+                                        id="home-stat",
+                                        color="light",
+                                        style={"width": "10rem", "margin-left": "5%", "height": "9em"}
+                            ),
+
+                            dbc.Card(
+                                        [
+                                            dbc.CardHeader("Rent to Income ratio"),
                                             dbc.CardBody(
                                                 [
                                                     html.P(id="ratio-card", style={"font-size": "2em"}),
@@ -183,7 +198,7 @@ layout = html.Div([
                                         style={"width": "10rem", "margin-left": "5%", "height": "9em"}
                             ),
 
-                ], style={"margin-top":"5em", "margin-left":"9em"}),
+                ], style={"margin-top":"5em", "margin-left":"11em", "width":"100%"}),
 
                 # Natural Vacancy
                 dcc.Graph(
@@ -250,6 +265,7 @@ def update_market(dummy, comps_store):
 
                          Output("income-card", "children"),
                          Output("pop-card", "children"),
+                         Output("home-value", "children"),
                          Output("ratio-card", "children")
 
                       ],
@@ -282,6 +298,14 @@ def demo_data(dummy, comps_store):
 
         inc = '${:,.0f}'.format(cres[0]['B19013_001E'])
 
+        # Median Home Value
+        cres = c.acs5.state_county('B25077_001E',
+                           states.CA.fips,
+                           result['County Subdivisions'][0]['COUNTY']
+                          )
+
+        home_value = '${:,.0f}'.format(cres[0]['B25077_001E'])
+
         # Population
         cres = c.acs5.state_county(
                                    'B01003_001E',
@@ -309,7 +333,7 @@ def demo_data(dummy, comps_store):
 
         popdensity = cres[0]['B01003_001E']/area
 
-        popdensity = '{:,.0f}'.format(popdensity)
+        popdensity = '{:,.0f} mi2'.format(popdensity)
 
         # Monthly Average/Median rent to gross median income ratio
         rent_lst = []
@@ -325,7 +349,7 @@ def demo_data(dummy, comps_store):
         ratio = mean(rent_lst)/(income/12)
         ratio = '{:,.0f}%'.format(ratio*100)
 
-        return (inc, popdensity, ratio)
+        return (inc, popdensity, home_value, ratio)
 
     else:
 
@@ -510,12 +534,14 @@ def update_image(dummy, comps_store):
 
     # Rents + Occupancy, add condition to check for occupancy below market level
 
-    if float(comps_store['local_rent'].replace('$','')) <= float(comps_store['price']):
+    print(comps_store['local_rent'])
+
+    if float(comps_store['local_rent'].replace('$','').replace('SF/Yr.','').strip()) <= float(comps_store['price']):
 
         img_link = "https://stroom-images.s3.us-west-1.amazonaws.com/low_indicator.png"
 
         card_img_src = img_link
-        card_header = "Low NOI Growth and Upside Potential"
+        card_header = "Low Income Growth and Upside Potential"
         card_text = "Rental revenue is close to comparable market value."
 
         return (card_img_src, card_header, card_text)
@@ -525,7 +551,7 @@ def update_image(dummy, comps_store):
         img_link = "https://stroom-images.s3.us-west-1.amazonaws.com/high_indicator.png"
 
         card_img_src = img_link
-        card_header = "NOI Growth and Upside Potential"
+        card_header = "Income Growth and Upside Potential"
         card_text = "Rental revenue is lower than comparable market value."
 
         return (card_img_src, card_header, card_text)

@@ -52,7 +52,7 @@ from sagemaker.session import Session
 from sagemaker.local import LocalSession
 
 # Read ML data
-df_lease = pd.read_csv(os.getcwd() + "/data/LeaseComp_sf_la_mf_agg_v12_ml.csv")
+df_lease = pd.read_csv(os.getcwd() + "/data/LeaseComp_sf_la_mf_agg_v13_ml.csv")
 
 # Drop column
 df_lease.drop(df_lease.filter(regex="Unname"),axis=1, inplace=True)
@@ -61,8 +61,7 @@ df_lease.drop(df_lease.filter(regex="Unname"),axis=1, inplace=True)
 df_sub = df_lease[['Year Built',
                    'Size',
                    'Most Recent Physical Occupancy',
-                   'Preceding Fiscal Year Revenue',
-                   'Most Recent Operating Expenses',
+                   'Operating Expenses at Contribution',
                    'WalkScore',
                    'TransitScore',
                    'geohash',
@@ -78,24 +77,26 @@ df_sub = df_lease[['Year Built',
                    'parkingType',
                    'parkingSpaces',
                    'numberOfBuildings',
+                   'propertyTaxAmount',
                    'taxRate',
+                   'Rent_1Br',
                    'Revenue_per_sqft_month']]
 
 
 # Convert percentage to numeric
 df_sub['Most Recent Physical Occupancy'] = df_sub['Most Recent Physical Occupancy'].apply(clean_percent).astype('float')
 # Currency to numeric
-df_sub['Most Recent Operating Expenses'] = df_sub['Most Recent Operating Expenses'].apply(clean_currency).astype('float')
+df_sub['Operating Expenses at Contribution'] = df_sub['Operating Expenses at Contribution'].apply(clean_currency).astype('float')
 
 # split df into train and test
-X_train, X_test, y_train, y_test = train_test_split(df_sub.iloc[:,0:21], df_sub.iloc[:,-1], test_size=0.1, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(df_sub.iloc[:,0:19], df_sub.iloc[:,-1], test_size=0.1, random_state=42)
 
 # Encode categorical variables
 cat_vars = ['geohash','Loan Status','Ownership','AirCon','Pool','Condition','constructionType','parkingType']
 cat_transform = ColumnTransformer([('cat', OneHotEncoder(handle_unknown='ignore'), cat_vars)], remainder='passthrough')
 
-# Create encoder object
 encoder = cat_transform.fit(X_train)
+
 
 # Append row to LeaseSample Pandas DataFrame
 def append_prop(tenant, industry, address, city, zipcode, state, proptype, leasetype, propclass, floor, built, renovated, startdt, enddt, sqft, rentask, rentner, rentesc, free, ti, lf, opex):
@@ -136,7 +137,7 @@ def calc_distance(prop_loc, Lat, Long, prop_id):
 
 
 # Function to calculate optimal rent.
-def calc_rent(prop_address, proptype, yr_built, space, units, ameneties, occupancy, taxRate, geohash):
+def calc_rent(prop_address, proptype, yr_built, space, units, ameneties, assval, occupancy, opex, taxAmt, taxRate, rent, geohash):
 
     np.random.seed(0)
 
@@ -166,33 +167,20 @@ def calc_rent(prop_address, proptype, yr_built, space, units, ameneties, occupan
 
     sagemaker_client = sagemaker.session.Session(boto_session = client)
 
-    # In order to impute the missing data, we need to filter the df by city / location of the subject property, so that are estimates are representative of the market.
-    geo = gh.encode(Lat, Long, 5)
-
-    # Lookup city
-    city = city_geohash(geo)
-
-    df_sub = LeaseComp_sf_la_mf[LeaseComp_sf_la_mf['City'] == city]
-
-    # Convert percentage to numeric
-    df_sub['Most Recent Physical Occupancy'] = df_sub['Most Recent Physical Occupancy'].apply(clean_percent).astype('float')
-    # Currency to numeric
-    df_sub['Most Recent Operating Expenses'] = df_sub['Most Recent Operating Expenses'].apply(clean_currency).astype('float')
 
     # Create a test data point and save to csv - the input format for SageMaker Endpoint
     df = pd.DataFrame({
 
                                'Year Built': int(yr_built),
                                'Size': int(units),
-                               'Most Recent Physical Occupancy': occupancy,
-                               'Preceding Fiscal Year Revenue': df_sub['Preceding Fiscal Year Revenue'].quantile(0.25),
-                               'Most Recent Operating Expenses': df_sub['Most Recent Operating Expenses'].quantile(0.25),
+                               'Most Recent Physical Occupancy': float(occupancy),
+                               'Operating Expenses at Contribution': float(opex),
                                'WalkScore': Walk,
                                'TransitScore': Transit,
                                'geohash': geohash,
-                               'EstRentableArea': df_sub['EstRentableArea'].median(),
+                               'EstRentableArea': space,
                                'Loan Status': df_sub['Loan Status'].mode(),
-                               'EstValue': df_sub['EstValue'].median(),
+                               'EstValue': assval,
                                'CapRate': df_sub['CapRate'].median(),
                                'Ownership': np.random.choice(df_sub['Ownership'], 1)[0],
                                'AirCon': np.random.choice(df_sub['AirCon'], 1)[0],
@@ -202,9 +190,12 @@ def calc_rent(prop_address, proptype, yr_built, space, units, ameneties, occupan
                                'parkingType': np.random.choice(df_sub['parkingType'], 1)[0],
                                'parkingSpaces': df_sub['parkingSpaces'].median(),
                                'numberOfBuildings': df_sub['numberOfBuildings'].median(),
+                               'propertyTaxAmount': taxAmt,
+                               'Rent_1Br': rent,
                                'taxRate': taxRate
 
                         }, index=[0])
+
 
     # Encode to handle categorical variables
     testpoint = encoder.transform(df).toarray().tolist()
@@ -224,7 +215,8 @@ def calc_rent(prop_address, proptype, yr_built, space, units, ameneties, occupan
     '''
 
     # Predict method
-    endpoint_name = "sagemaker-xgboost-2021-12-11-23-17-37-092"
+    endpoint_name = "sagemaker-xgboost-2022-01-25-17-40-05-619"
+
 
     predictor = Predictor(
                           endpoint_name = endpoint_name,
@@ -318,10 +310,7 @@ def calc_rent(prop_address, proptype, yr_built, space, units, ameneties, occupan
     LeaseSamplev2['Revenue_per_sqft_month'].replace([np.inf, -np.inf], np.nan, inplace=True)
     LeaseSamplev2 = LeaseSamplev2[LeaseSamplev2['Revenue_per_sqft_month'].notna()]
 
-    if flow_type == "Leasing":
-        LeaseSamplev2['Estimated_Rent'] = (LeaseSamplev2['Revenue_per_sqft_month'] * int(space)).astype(int)
-    else:
-        LeaseSamplev2['Estimated_Rent'] = (LeaseSamplev2['Revenue_per_sqft_month']*12).astype(int)
+    LeaseSamplev2['Estimated_Rent'] = (LeaseSamplev2['Revenue_per_sqft_month']*12).astype(int)
 
     # Add distance from subject property column
     LeaseSamplev2['Distance'] = LeaseSamplev2['PropertyID'].map(dist_dict_filter)

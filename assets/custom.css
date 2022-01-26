@@ -18,17 +18,19 @@
 }
 
 .prop-style {
-  padding: 0% 0px 0px 1em;
-  margin-top: -80%;
-  margin-left: 1em;
+  padding: 0% 0px 0px 10px;
+  margin-top: -77.5%;
+  margin-left: -3em;
   position: relative;
 }
 
 .table-style {
   padding: 38px 0px 0px 33px;
-  margin-top: 18%;
+  margin-top: 1%;
+  margin-left: 50px;
   position: relative;
-  width: 100%;
+  width: 95%;
+  float: left;
 }
 
 .vacancy-style {
@@ -216,8 +218,12 @@ div#bath {
 }
 
 #page-content {
-  margin-left: 0 !important;
+  margin-left: 10%;
+  margin-top: 2%;
+  float: left;
+  position: absolute;
 }
+
 .monthly-rent,
 .assessed-value,
 .total-sq-ft,

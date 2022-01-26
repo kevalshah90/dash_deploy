@@ -18,7 +18,7 @@ from sagemaker.local import LocalSession
 
 
 # read data
-df_lease = pd.read_csv(os.getcwd() + "/data/LeaseComp_sf_la_mf_agg_v12_ml.csv")
+df_lease = pd.read_csv(os.getcwd() + "/data/LeaseComp_sf_la_mf_agg_v13_ml.csv")
 
 # drop column
 df_lease.drop(df_lease.filter(regex="Unname"),axis=1, inplace=True)

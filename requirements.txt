@@ -14,6 +14,7 @@ geocoder==1.38.1
 geolib==1.0.7
 geopandas==0.10.2
 geopy==2.2.0
+pygeodesy==22.1.22
 google_streetview==1.2.9
 googlemaps==4.5.3
 google-cloud-bigquery==2.31.0
@@ -45,3 +46,5 @@ walkscore_api==1.0.1
 Werkzeug==1.0.1
 xgboost==1.5.1
 mysqlclient==2.1.0
+configparser==5.2.0
+usaddress==0.5.0

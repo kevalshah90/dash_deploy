@@ -5,12 +5,11 @@ import dash_bootstrap_components as dbc
 import os
 
 # External stylesheets
-_BOOTSWATCH_BASE = "https://stackpath.bootstrapcdn.com/bootswatch/4.5.2/"
 
-SLATE = _BOOTSWATCH_BASE + "slate/bootstrap.min.css"
+SANDSTONE = "https://cdn.jsdelivr.net/npm/bootswatch@4.5.2/dist/sandstone/bootstrap.min.css"
 
 external_stylesheets = [
-    SLATE,
+    SANDSTONE,
     {
         'href': 'custom.css',
         'rel': 'stylesheet'
