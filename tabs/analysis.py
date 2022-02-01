@@ -22,7 +22,7 @@ from scipy.stats import poisson
 from statistics import mean
 from natural_vac import reg_vacancy
 from draw_polygon import market_Lookup
-from funcs import clean_percent, clean_currency
+from funcs import clean_percent, clean_currency, get_geocodes
 from dash.exceptions import PreventUpdate
 from sklearn.preprocessing import MinMaxScaler
 import geocoder
@@ -51,7 +51,7 @@ client = bigquery.Client(project = "stroom-data-exploration")
 os.environ.setdefault("GCLOUD_PROJECT", "stroom-data-exploration")
 
 # Mapbox
-MAPBOX_KEY = "pk.eyJ1Ijoia2V2YWxzaGFoIiwiYSI6ImNqbW1nbG90MDBhNTQza3IwM3pvd2I3bGUifQ.dzdTsg69SdUXY4zE9s2VGg"
+MAPBOX_KEY = "pk.eyJ1Ijoia2V2YWxzaGFoIiwiYSI6ImNqeDNsNzY2YTAwN3g0YW13aHMyNXIwMHAifQ.Hx8cPYyTFTSXP9ixiNcrTw"
 token = MAPBOX_KEY
 Geocoder = mapbox.Geocoder(access_token=token)
 
@@ -198,7 +198,7 @@ layout = html.Div([
                                         style={"width": "10rem", "margin-left": "5%", "height": "9em"}
                             ),
 
-                ], style={"margin-top":"5em", "margin-left":"11em", "width":"100%"}),
+                ], className="row-demo-analysis"),
 
                 # Natural Vacancy
                 dcc.Graph(
@@ -270,14 +270,13 @@ def update_market(dummy, comps_store):
 
                       ],
                       [
-                         Input("dummy-div", "value"),
-
+                         Input("market-card", "children"),
                       ],
                       [
                          State("comps-store", "data")
                       ]
                 )
-def demo_data(dummy, comps_store):
+def demo_data(market, comps_store):
 
     if comps_store:
 
@@ -285,6 +284,10 @@ def demo_data(dummy, comps_store):
 
         g = geocoder.mapbox(addr, key=token)
         geojson = g.json
+
+        # Lookup market / submarket
+        Lat, Long = get_geocodes(addr)
+        market = market_Lookup(Lat, Long, geom_dict)
 
         # Census
         result = cg.coordinates(x=geojson['lng'], y=geojson['lat'])
@@ -333,20 +336,17 @@ def demo_data(dummy, comps_store):
 
         popdensity = cres[0]['B01003_001E']/area
 
-        popdensity = '{:,.0f} mi2'.format(popdensity)
+        popdensity = '{:,.0f} mi\u00b2'.format(popdensity)
 
         # Monthly Average/Median rent to gross median income ratio
-        rent_lst = []
-
-        for rent in comps_store['table']:
-
-            val = int(clean_currency(rent['Rent_monthly']))
-
-            rent_lst.append(val)
 
         income = int(clean_currency(inc))
 
-        ratio = mean(rent_lst)/(income/12)
+        df = df_market[df_market['CBSA'] == market]
+
+        df['Rent'] = df['Rent'].apply(clean_currency)
+
+        ratio = df['Rent'].mean()/(income/12)
         ratio = '{:,.0f}%'.format(ratio*100)
 
         return (inc, popdensity, home_value, ratio)
@@ -462,7 +462,7 @@ def update_vacancy(dummy, comps_store):
 
 
        '''
-       # Code for Economy Graph
+       Code for Economy Graph
        '''
 
        fig2 = go.Figure(
@@ -533,10 +533,7 @@ def update_vacancy(dummy, comps_store):
 def update_image(dummy, comps_store):
 
     # Rents + Occupancy, add condition to check for occupancy below market level
-
-    print(comps_store['local_rent'])
-
-    if float(comps_store['local_rent'].replace('$','').replace('SF/Yr.','').strip()) <= float(comps_store['price']):
+    if float(comps_store['price_values']['predicted']) <= float(comps_store['price_values']['market_price']):
 
         img_link = "https://stroom-images.s3.us-west-1.amazonaws.com/low_indicator.png"
 

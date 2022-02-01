@@ -75,7 +75,6 @@ df_sub = df_lease[['Year Built',
                    'Condition',
                    'constructionType',
                    'parkingType',
-                   'parkingSpaces',
                    'numberOfBuildings',
                    'propertyTaxAmount',
                    'taxRate',
@@ -89,7 +88,7 @@ df_sub['Most Recent Physical Occupancy'] = df_sub['Most Recent Physical Occupanc
 df_sub['Operating Expenses at Contribution'] = df_sub['Operating Expenses at Contribution'].apply(clean_currency).astype('float')
 
 # split df into train and test
-X_train, X_test, y_train, y_test = train_test_split(df_sub.iloc[:,0:19], df_sub.iloc[:,-1], test_size=0.1, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(df_sub.iloc[:,0:21], df_sub.iloc[:,-1], test_size=0.1, random_state=42)
 
 # Encode categorical variables
 cat_vars = ['geohash','Loan Status','Ownership','AirCon','Pool','Condition','constructionType','parkingType']
@@ -188,14 +187,12 @@ def calc_rent(prop_address, proptype, yr_built, space, units, ameneties, assval,
                                'Condition': np.random.choice(df_sub['Condition'], 1)[0],
                                'constructionType': np.random.choice(df_sub['constructionType'], 1)[0],
                                'parkingType': np.random.choice(df_sub['parkingType'], 1)[0],
-                               'parkingSpaces': df_sub['parkingSpaces'].median(),
                                'numberOfBuildings': df_sub['numberOfBuildings'].median(),
                                'propertyTaxAmount': taxAmt,
                                'Rent_1Br': rent,
                                'taxRate': taxRate
 
                         }, index=[0])
-
 
     # Encode to handle categorical variables
     testpoint = encoder.transform(df).toarray().tolist()
@@ -215,7 +212,7 @@ def calc_rent(prop_address, proptype, yr_built, space, units, ameneties, assval,
     '''
 
     # Predict method
-    endpoint_name = "sagemaker-xgboost-2022-01-25-17-40-05-619"
+    endpoint_name = "sagemaker-xgboost-2022-01-26-03-19-51-000"
 
 
     predictor = Predictor(
@@ -310,7 +307,12 @@ def calc_rent(prop_address, proptype, yr_built, space, units, ameneties, assval,
     LeaseSamplev2['Revenue_per_sqft_month'].replace([np.inf, -np.inf], np.nan, inplace=True)
     LeaseSamplev2 = LeaseSamplev2[LeaseSamplev2['Revenue_per_sqft_month'].notna()]
 
-    LeaseSamplev2['Estimated_Rent'] = (LeaseSamplev2['Revenue_per_sqft_month']*12).astype(int)
+    # Create new column for Revenue Per Sq.ft / Year
+    LeaseSamplev2['Revenue_per_sqft_year'] = LeaseSamplev2['Revenue_per_sqft_month'] * 12
+    LeaseSamplev2['Revenue_per_sqft_year'] = LeaseSamplev2['Revenue_per_sqft_year'].apply('${:,.1f}'.format)
+
+    # Monthly Revenue / Unit / Month
+    LeaseSamplev2['EstRevenueMonthly'] = (LeaseSamplev2['Preceding Fiscal Year Revenue']/LeaseSamplev2['Size'])/12
 
     # Add distance from subject property column
     LeaseSamplev2['Distance'] = LeaseSamplev2['PropertyID'].map(dist_dict_filter)
@@ -324,21 +326,21 @@ def calc_rent(prop_address, proptype, yr_built, space, units, ameneties, assval,
     # Drop duplications
     dfCompSet.drop_duplicates(subset=['Property Name','Zip Code'], keep='last', inplace=True)
 
-    dfCompSetv1 = dfCompSet.sort_values(by=['Estimated_Rent'], ascending=False)
+    dfCompSetv1 = dfCompSet.sort_values(by=['EstRevenueMonthly'], ascending=False)
 
     # Calculate weighted average rental price
-    dfSimilarityv1 = pd.merge(dfSimilarity, LeaseSamplev2[['PropertyID','Estimated_Rent','Opex']], how='inner', left_on='PropertyID', right_on='PropertyID')
+    dfSimilarityv1 = pd.merge(dfSimilarity, LeaseSamplev2[['PropertyID','EstRevenueMonthly','Opex']], how='inner', left_on='PropertyID', right_on='PropertyID')
 
     # Datatype consistency
     dfSimilarityv1['Weights'] = dfSimilarityv1['Weights'].astype(float)
 
     # Sort by similarity weight and sample top n rows -- This will likely elimimate the low income / affordable housing
-    dfSimilarityv2 = dfSimilarityv1.sort_values(by=['Estimated_Rent'], ascending=False)
+    dfSimilarityv2 = dfSimilarityv1.sort_values(by=['EstRevenueMonthly'], ascending=False)
 
     # Top 10 similar properties
     dfSimilarityv2 = dfSimilarityv2.head(10)
 
     #  Use weights of top 10 similar properties
-    calc_rent = round(np.average(dfSimilarityv2['Estimated_Rent'], weights = dfSimilarityv2['Weights']),2)
+    calc_rent = round(np.average(dfSimilarityv2['EstRevenueMonthly'], weights = dfSimilarityv2['Weights']),2)
 
     return {'y_pred': res,  'price' : calc_rent, 'df_lease' : dfCompSetv1.head(15), 'radius': radius}

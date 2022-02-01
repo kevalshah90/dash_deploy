@@ -18,9 +18,9 @@
 }
 
 .prop-style {
-  padding: 0% 0px 0px 10px;
+  padding: 2% 0px 0px 10px;
   margin-top: -77.5%;
-  margin-left: -3em;
+  margin-left: -5em;
   position: relative;
 }
 
@@ -67,6 +67,7 @@
 
 button.export {
   font-size: 15px;
+  margin-right: -5px;
 
 }
 
@@ -218,7 +219,7 @@ div#bath {
 }
 
 #page-content {
-  margin-left: 10%;
+  margin-left: 8.5%;
   margin-top: 2%;
   float: left;
   position: absolute;
@@ -476,4 +477,73 @@ div#asking-rent-slider {
   margin-left: 28em;
   margin-top: -12.5em;
 
+}
+
+.row-demo-analysis {
+  margin-top: 5em;
+  margin-left: 12em;
+  width: 100%
+}
+
+/* source deals */
+.market-deal-style {
+
+  height: 12px;
+  width: 30%;
+  float: left;
+
+}
+
+div#market-deal {
+  width: 65%;
+}
+
+.prop-type-deal-style {
+
+  height: 12px;
+  margin-left: 5px;
+  width: 30%;
+  float: left;
+
+}
+
+div#prop-type-deal {
+  width: 52%;
+}
+
+input#year-built-min {
+  width: 5em;
+  height: 44px;
+}
+
+input#year-built-max {
+  width: 5em;
+  height: 44px;
+}
+
+input#num-units-min {
+  width: 5em;
+  height: 44px;
+}
+
+input#num-units-max {
+  width: 5em;
+  height: 44px;
+}
+
+div#deal-layout {
+  margin-left: 5em;
+}
+
+.row-1-deal {
+  height: 5em;
+  width: 95%;
+  margin-left: 0px;
+}
+
+
+.table-style-deal {
+  width: 95%;
+  margin-left: 12px;
+  margin-top: 10px;
 }

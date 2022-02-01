@@ -16,7 +16,7 @@ from plotly.graph_objs import *
 import flask
 from application import application
 import os
-from tabs import comps, analysis
+from tabs import comps, analysis, deals
 from pages import home
 import traceback
 
@@ -52,7 +52,7 @@ application.layout = html.Div([
                                         [
                                             dbc.NavLink("Comps", href="/comps", active="partial"),
                                             dbc.NavLink("Market", href="/market", active="partial"),
-                                            dbc.NavLink("Deals", href="/deals", disabled=True),
+                                            dbc.NavLink("Deals", href="/deals", active="partial"),
 
                                         ],
                                         vertical=True,
@@ -66,7 +66,7 @@ application.layout = html.Div([
                                     "top": 0,
                                     "left": 0,
                                     "bottom": 0,
-                                    "width": "12rem",
+                                    "width": "10rem",
                                     "padding": "1rem 1rem",
                                     "background-color": "#f8f9fa",
                                 },
@@ -99,16 +99,19 @@ application.layout = html.Div([
              )
 def display_content(pathname):
 
+    print(pathname)
+
     if pathname in ["/","/dashboard/","/dashboard2","/comps"]:
-        print(pathname)
         return comps.layout
 
     elif pathname == "/market":
         return analysis.layout
 
+    elif pathname == "/deals":
+        return deals.layout
+
     else:
         return dash.no_update
-
 
 
 
