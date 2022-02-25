@@ -76,6 +76,43 @@ layout = html.Div([
 
          # Local level Statistics
          dbc.Row([
+
+                     dbc.Card(
+                          [
+                              dbc.Row(
+                                  [
+                                      dbc.Col(
+                                          dbc.CardImg(
+                                              id="card-img",
+                                              #src="/static/images/portrait-placeholder.png",
+                                              className="card-img",
+                                          ),
+                                          className="card-img",
+                                      ),
+
+                                      #dbc.CardHeader(id="summary-header"),
+
+                                      dbc.Col(
+                                          dbc.CardBody(
+                                              [
+
+                                                  html.H4(id="card-header"),
+                                                  html.P(
+                                                      id="card-text",
+                                                      className="card-text",
+                                                  ),
+
+                                              ]
+                                          ),
+                                          className="col-md-8",
+                                      ),
+                                  ],
+                                  className="g-0 d-flex align-items-center",
+                              )
+                           ],
+                           className="summary",
+                     ),
+
                      dbc.Card(
                                  [
                                      dbc.CardHeader("Median Rent"),
@@ -88,7 +125,7 @@ layout = html.Div([
                                  ],
                                  id="rent-stat",
                                  color="light",
-                                 style={"width": "10rem", "margin-left": "-27%", "height": "9em"}
+                                 style={"width": "10rem", "margin-left": "2%", "height": "9em"}
                      ),
 
                      dbc.Card(
@@ -103,7 +140,7 @@ layout = html.Div([
                                  ],
                                  id="revenue-stat",
                                  color="light",
-                                 style={"width": "10rem", "margin-left": "5%", "height": "9em"}
+                                 style={"width": "10rem", "margin-left": "2%", "height": "9em"}
                      ),
 
                      dbc.Card(
@@ -118,7 +155,7 @@ layout = html.Div([
                                  ],
                                  id="occ-stat",
                                  color="light",
-                                 style={"width": "10rem", "margin-left": "5%", "height": "9em"}
+                                 style={"width": "10rem", "margin-left": "2%", "height": "9em"}
                      ),
 
                      dbc.Card(
@@ -133,10 +170,10 @@ layout = html.Div([
                                  ],
                                  id="opex-stat",
                                  color="light",
-                                 style={"width": "10rem", "margin-left": "5%", "height": "9em"}
+                                 style={"width": "10rem", "margin-left": "2%", "height": "9em"}
                      ),
 
-         ], style={"margin-top":"52em", "margin-left":"31px"}),
+         ], style={"width":"100%", "margin-top":"52em", "margin-left":"16em"}),
 
 
 
@@ -1161,6 +1198,41 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
     else:
         #PreventUpdate
         return (no_update, no_update, no_update, no_update)
+
+
+# Update upside card
+@application.callback([
+                        Output("card-img", "src"),
+                        Output("card-header", "children"),
+                        Output("card-text", "children")
+                      ],
+                      [
+                        Input("comps-store", "data")
+                      ],
+                      )
+def update_image(comps_store):
+
+    # Rents + Occupancy, add condition to check for occupancy below market level
+    if float(comps_store['price_values']['predicted']) <= float(comps_store['price_values']['market_price']):
+
+        img_link = "https://stroom-images.s3.us-west-1.amazonaws.com/low_indicator.png"
+
+        card_img_src = img_link
+        card_header = "Low Income Growth and Upside Potential"
+        card_text = "Rental revenue is close to comparable market value."
+
+        return (card_img_src, card_header, card_text)
+
+    else:
+
+        img_link = "https://stroom-images.s3.us-west-1.amazonaws.com/high_indicator.png"
+
+        card_img_src = img_link
+        card_header = "Income Growth and Upside Potential"
+        card_text = "Rental revenue is lower than comparable market value."
+
+        return (card_img_src, card_header, card_text)
+
 
 # Update DataTable and Local Level Stats
 @application.callback([

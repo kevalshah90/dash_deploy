@@ -99,43 +99,6 @@ layout = html.Div([
                 ),
 
 
-                dbc.Card(
-                    [
-                        dbc.Row(
-                            [
-                                dbc.Col(
-                                    dbc.CardImg(
-                                        id="card-img",
-                                        #src="/static/images/portrait-placeholder.png",
-                                        className="card-img",
-                                    ),
-                                    className="card-img",
-                                ),
-
-                                #dbc.CardHeader(id="summary-header"),
-
-                                dbc.Col(
-                                    dbc.CardBody(
-                                        [
-
-                                            html.H4(id="card-header"),
-                                            html.P(
-                                                id="card-text",
-                                                className="card-text",
-                                            ),
-
-                                        ]
-                                    ),
-                                    className="col-md-8",
-                                ),
-                            ],
-                            className="g-0 d-flex align-items-center",
-                        )
-                    ],
-                    className="summary",
-                ),
-
-
                 # Demographics data
                 dbc.Row([
                             dbc.Card(
@@ -150,7 +113,7 @@ layout = html.Div([
                                         ],
                                         id="inc-stat",
                                         color="light",
-                                        style={"width": "10rem", "margin-left": "-28%", "height": "9em"}
+                                        style={"width": "10rem", "margin-left": "2.5%", "height": "9em"}
                             ),
 
                             dbc.Card(
@@ -165,7 +128,7 @@ layout = html.Div([
                                         ],
                                         id="pop-stat",
                                         color="light",
-                                        style={"width": "10rem", "margin-left": "5%", "height": "9em"}
+                                        style={"width": "10rem", "margin-left": "2.5%", "height": "9em"}
                             ),
 
                             dbc.Card(
@@ -180,7 +143,7 @@ layout = html.Div([
                                         ],
                                         id="home-stat",
                                         color="light",
-                                        style={"width": "10rem", "margin-left": "5%", "height": "9em"}
+                                        style={"width": "10rem", "margin-left": "2.5%", "height": "9em"}
                             ),
 
                             dbc.Card(
@@ -195,7 +158,7 @@ layout = html.Div([
                                         ],
                                         id="ratio-stat",
                                         color="light",
-                                        style={"width": "10rem", "margin-left": "5%", "height": "9em"}
+                                        style={"width": "10rem", "margin-left": "2.5%", "height": "9em"}
                             ),
 
                 ], className="row-demo-analysis"),
@@ -204,7 +167,7 @@ layout = html.Div([
                 dcc.Graph(
 
                             id="vacancy-graph",
-                            style={"display": "inline-block", "width": "1118px", "float": "left", "margin-top": "10%", "height":"500px"}
+                            style={"display": "inline-block", "width": "1118px", "float": "left", "margin-top": "5%", "height":"500px"}
 
                 ),
 
@@ -212,7 +175,7 @@ layout = html.Div([
                 dcc.Graph(
 
                             id="economy-graph",
-                            style={"display": "inline-block", "width": "1118px", "float": "left", "margin-top": "10%", "height":"500px"}
+                            style={"display": "inline-block", "width": "1118px", "float": "left", "margin-top": "5%", "height":"500px"}
 
                 ),
 
@@ -515,43 +478,6 @@ def update_vacancy(dummy, comps_store):
     else:
 
        return (no_update)
-
-
-
-@application.callback([
-                        Output("card-img", "src"),
-                        Output("card-header", "children"),
-                        Output("card-text", "children")
-                      ],
-                      [
-                        Input("dummy-div", "children")
-                      ],
-                      [
-                        State("comps-store", "data")
-                      ]
-                      )
-def update_image(dummy, comps_store):
-
-    # Rents + Occupancy, add condition to check for occupancy below market level
-    if float(comps_store['price_values']['predicted']) <= float(comps_store['price_values']['market_price']):
-
-        img_link = "https://stroom-images.s3.us-west-1.amazonaws.com/low_indicator.png"
-
-        card_img_src = img_link
-        card_header = "Low Income Growth and Upside Potential"
-        card_text = "Rental revenue is close to comparable market value."
-
-        return (card_img_src, card_header, card_text)
-
-    else:
-
-        img_link = "https://stroom-images.s3.us-west-1.amazonaws.com/high_indicator.png"
-
-        card_img_src = img_link
-        card_header = "Income Growth and Upside Potential"
-        card_text = "Rental revenue is lower than comparable market value."
-
-        return (card_img_src, card_header, card_text)
 
 
 

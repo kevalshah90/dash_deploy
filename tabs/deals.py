@@ -4,7 +4,6 @@ import numpy as np
 import os
 import json
 import ast
-
 import dash
 from dash.dependencies import Input, Output, State
 from dash import dcc
