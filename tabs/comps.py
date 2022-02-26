@@ -898,8 +898,6 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
 
 
            # Check if found in DB
-           print("api store", api_store)
-
            geohashval = api_store['geohash']
 
            if api_store['propdetails'] is not None:
@@ -1207,31 +1205,35 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
                         Output("card-text", "children")
                       ],
                       [
-                        Input("comps-store", "data")
+                        Input("price-value", "value")
                       ],
                       )
-def update_image(comps_store):
+def update_image(price_value):
+
+    print("price store", price_value)
 
     # Rents + Occupancy, add condition to check for occupancy below market level
-    if float(comps_store['price_values']['predicted']) <= float(comps_store['price_values']['market_price']):
+    # if float(comps_store['price_values']['predicted']) <= float(comps_store['price_values']['market_price']):
+    #
+    #     img_link = "https://stroom-images.s3.us-west-1.amazonaws.com/low_indicator.png"
+    #
+    #     card_img_src = img_link
+    #     card_header = "Low Income Growth and Upside Potential"
+    #     card_text = "Rental revenue is close to comparable market value."
+    #
+    #     return (card_img_src, card_header, card_text)
+    #
+    # else:
+    #
+    #     img_link = "https://stroom-images.s3.us-west-1.amazonaws.com/high_indicator.png"
+    #
+    #     card_img_src = img_link
+    #     card_header = "Income Growth and Upside Potential"
+    #     card_text = "Rental revenue is lower than comparable market value."
+    #
+    #     return (card_img_src, card_header, card_text)
 
-        img_link = "https://stroom-images.s3.us-west-1.amazonaws.com/low_indicator.png"
-
-        card_img_src = img_link
-        card_header = "Low Income Growth and Upside Potential"
-        card_text = "Rental revenue is close to comparable market value."
-
-        return (card_img_src, card_header, card_text)
-
-    else:
-
-        img_link = "https://stroom-images.s3.us-west-1.amazonaws.com/high_indicator.png"
-
-        card_img_src = img_link
-        card_header = "Income Growth and Upside Potential"
-        card_text = "Rental revenue is lower than comparable market value."
-
-        return (card_img_src, card_header, card_text)
+    return (no_update, no_update, no_update)
 
 
 # Update DataTable and Local Level Stats

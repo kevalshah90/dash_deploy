@@ -554,9 +554,12 @@ div#map-deal {
   width: 565%;
   height:700px;
   float: left;
-  margin-left: 2em;
+  margin-left: 1em;
 }
 
+div#checklist-deal {
+  width: 150%;
+}
 
 .checklist-style {
   width: 8em;

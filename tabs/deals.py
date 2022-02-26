@@ -134,16 +134,31 @@ layout = html.Div([
 
                          dbc.Col(
 
+                            dcc.Checklist(
+                               options=[
+                                   {'label': 'Rental Growth', 'value': 'Rent'},
+                                   {'label': 'Population', 'value': 'Pop'},
+                                   {'label': 'Income', 'value': 'Income'},
+                               ],
+                               id = 'checklist-deal',
+                               value='Rent'
+                            ),
+
+                         width={"size": 1, "order": "first"}),
+
+
+                         dbc.Col(
+
                             html.Div([
 
                                 # Plot properties map
                                 dcc.Graph(id="map-deal",
-                                          style={"display": "inline-block", "width": "660%", "float": "left", "height":"700px"}
+                                          style={"display": "inline-block", "width": "592%", "float": "left", "height":"700px"}
                                           ),
 
                                 ], className="deal-map-style"),
 
-                         width={"size": 2, "order": "first"}),
+                         width={"size": 2, "order": "last"}),
 
 
                          dbc.Col([
@@ -322,7 +337,7 @@ layout = html.Div([
                           Input("num-units-max", "value")
 
                       ],
-             )
+                      )
 def update_map_deal(market, proptype, year_built_min, year_built_max, num_units_min, num_units_max):
 
     # Adjust map view
@@ -407,6 +422,50 @@ def update_map_deal(market, proptype, year_built_min, year_built_max, num_units_
                             }
                      }
         )
+
+        # Choroplethmapbox
+
+        # datad.append({
+        #
+        #                 "type": "Choroplethmapbox",
+        #                 "geojson": ,
+        #                 "name": "Location",
+        #                 "hovertext": propname,
+        #                 "showlegend": False,
+        #                 "hoverinfo": "text",
+        #                 "mode": "markers",
+        #                 "clickmode": "event+select",
+        #                 "customdata": df.loc[:,cd_cols].values,
+        #                 "marker": {
+        #                     "autocolorscale": False,
+        #                     "showscale":True,
+        #                     "symbol": "circle",
+        #                     "size": 9,
+        #                     "opacity": 0.8,
+        #                     "color": df['yhat'],
+        #                     "colorscale": "blues",
+        #                     "colorbar":dict(
+        #                                     title= 'Upside',
+        #                                     orientation= 'h',
+        #                                     #nticks=10,
+        #                                     showticklabels=True,
+        #                                     thickness= 20,
+        #                                     tickformatstops=dict(dtickrange=[0,10]),
+        #                                     titleside= 'top',
+        #                                     ticks= 'outside'
+        #                                     #ticklen= 1
+        #                                    )
+        #                     }
+        #              }
+        # )
+
+
+
+
+
+
+
+
 
         layout = {
 
