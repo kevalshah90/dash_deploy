@@ -39,10 +39,8 @@ s3_client = boto3.client('s3',
                          aws_access_key_id='AKIA2MQCGH6RW7TE3UG2',
                          aws_secret_access_key='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')
 
-
-
 # Read SF Multi-Family data
-LeaseComp_sf_la_mf = pd.read_csv(os.getcwd() + "/data/LeaseComp_sf_la_mf_agg_v11_raw.csv")
+LeaseComp_sf_la_mf = pd.read_csv(os.getcwd() + "/data/df_raw_v1_feb.csv")
 
 # Generate alphanumeric lease id and property ids
 def gen_ids(length):
@@ -71,12 +69,13 @@ def walkscore(lat, long, address, scores):
             return ts
 
     except Exception as e:
-        print(e)
+        print("Error with WalkScore API", e)
         pass
 
 # Clean currency
 def clean_currency(x):
-    """ If the value is a string, then remove currency symbol and delimiters
+    """
+    If the value is a string, then remove currency symbol and delimiters
     otherwise, the value is numeric and can be converted
     """
     if isinstance(x, str):
@@ -85,7 +84,8 @@ def clean_currency(x):
 
 # Clean percentage
 def clean_percent(x):
-    """ If the value is a string, then remove percent symbol and delimiters
+    """
+    If the value is a string, then remove percent symbol and delimiters
     otherwise, the value is numeric and can be converted
     """
     if isinstance(x, str):
@@ -141,9 +141,47 @@ def city_geohash(geo):
 
     return city
 
+# Dictionary for marker symbol
+sym_dict = {"Office": "suitcase",
+            "Multi-Family": "lodging",
+            "Industrial": "circle",
+            "grocery_or_supermarket": "grocery",
+            "supermarket": "grocery",
+            "department_store": "grocery",
+            "convenience_store": "grocery",
+            "hospital": "hospital",
+            "car_rental": "car",
+            "gas_station": "fuel",
+            "movie_theater": "cinema",
+            "bar": "bar",
+            "restaurant": "restaurant",
+            "cafe": "cafe",
+            "post_office": "post",
+            "university": "school",
+            "library": "library",
+            "airport": "airport",
+            "bank": "bank",
+            "light_rail_station": "rail-light",
+            "primary_school": "school",
+            "secondary_school": "school",
+            "school": "school",
+            "shopping_mall": "shop",
+            "train_station": "rail",
+            "transit_station": "rail-metro",
+            "subway_station": "rail-metro",
+            "bus_station": "bus",
+            "gym": "swimming",
+            "pharmacy": "pharmacy",
+            "drugstore": "pharmacy",
+            "pet_store": "dog-park",
+            "museum": "museum",
+            "church": "place-of-worship",
+            "synagogue": "place-of-worship",
+            "hindu_temple": "place-of-worship",
+            "mosque": "place-of-worship" }
 
 # Get nearby place information
-def nearby_places(addr):
+def nearby_places(addr, type):
 
     # API call to get place ID
     result = gmaps.find_place(addr, input_type = "textquery", language="en")
@@ -153,20 +191,45 @@ def nearby_places(addr):
     plc_details = gmaps.place(plc_id, fields=["formatted_address", "name", "geometry", "photo", "url", "type", "utc_offset", "vicinity"])
     result = plc_details['result']
 
-    # Get nearby places from place location - radius in meters
-    nearby = gmaps.places_nearby(location=result['geometry']['location'], radius = 4829)
+    # Set place types
+    if type == 'Transit':
+        types = ['light_rail_station','train_station','transit_station','subway_station']
+
+    elif type == 'Grocery':
+        types = ['supermarket','grocery_or_supermarket','department_store','convenience_store']
+
+    elif type == 'School':
+        types = ['primary_school','secondary_school','school']
+
+    elif type == 'Hospital':
+        types = ['hospital','pharmacy','drugstore']
+
+    elif type == 'Food/Cafe':
+        types = ['bar','restaurant','cafe']
+
+    elif type == 'Worship':
+        types = ['church','synagogue','hindu_temple','mosque']
+
+    elif type == 'Gas':
+        types = ['gas_station']
+
+    elif type == None:
+        types = ['supermarket','grocery_or_supermarket','department_store','convenience_store','hospital','movie_theater','bar','restaurant','post_office','university','library','airport','bank','light_rail_station','primary_school','secondary_school','school','shopping_mall','train_station','transit_station','subway_station','bus_station','gym','pharmacy','drugstore','pet_store','museum','church','synagogue','hindu_temple','mosque']
+
+    else:
+        types = ['supermarket','grocery_or_supermarket','department_store','convenience_store','hospital','movie_theater','bar','restaurant','post_office','university','library','airport','bank','light_rail_station','primary_school','secondary_school','school','shopping_mall','train_station','transit_station','subway_station','bus_station','gym','pharmacy','drugstore','pet_store','museum','church','synagogue','hindu_temple','mosque']
 
     # Declare a list to store dicts of nearby places
     places_lst = []
 
-    for i in range(len(nearby['results'])):
+    if type in ['Transit','Grocery','School','Hospital','Worship','Food/Cafe','Gas']:
 
-        # Filter to include only POIs
-        types = ['supermarket','hospital','movie_theater','bar','restaurant','post_office','university','library','airport','bank','light_rail_station','primary_school','secondary_school','school','shopping_mall','train_station','transit_station','gym','pharmacy','pet_store','museum']
+        # Get nearby places from place location - radius in meters
+        nearby = gmaps.places_nearby(location=result['geometry']['location'], radius = 8046, type = types)
 
-        for typ in types:
+        if nearby:
 
-            if typ in nearby['results'][i]['types']:
+            for i in range(len(nearby['results'])):
 
                 # Filter to include businesses currently operational
                 if nearby['results'][i].get('business_status') == 'OPERATIONAL':
@@ -175,11 +238,30 @@ def nearby_places(addr):
                     fdict = dict((k,v) for k, v in nearby['results'][i].items() if k in ['geometry','name','types'])
                     places_lst.append(fdict)
 
+    else:
+
+        nearby = gmaps.places_nearby(location=result['geometry']['location'], radius = 4829)
+
+        for i in range(len(nearby['results'])):
+
+            for typ in types:
+
+                if typ in nearby['results'][i]['types']:
+
+                    if nearby['results'][i].get('business_status') == 'OPERATIONAL':
+
+                       # Filter dict to only contain geometry, name, types
+                       fdict = dict((k,v) for k, v in nearby['results'][i].items() if k in ['geometry','name','types'])
+                       places_lst.append(fdict)
+
     # check if list was populated with nearby places
     if len(places_lst) > 0:
 
         # List of dicts into DataFrame
         df_nearby = pd.DataFrame(places_lst)
+
+        # Drop duplicates
+        df_nearby.drop_duplicates(subset=['name'], keep='first', inplace=True)
 
         # Format columns
         df_nearby['Lat'] = df_nearby['geometry'].str['location'].str['lat']
@@ -273,7 +355,7 @@ def attom_api_avalue(address):
 
     headers = {
         'accept': "application/json",
-        'apikey': "98b25d7c38aeb771184dd885b92b5cb5",
+        'apikey': "970de09b9ba910304594a9a49e2342e1",
         }
 
     addr = urllib.parse.quote(address)

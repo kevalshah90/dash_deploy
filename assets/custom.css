@@ -19,7 +19,7 @@
 
 .prop-style {
   padding: 2% 0px 0px 10px;
-  margin-top: -80%;
+  margin-top: -77%;
   margin-left: -5em;
   position: relative;
 }
@@ -492,6 +492,7 @@ div#asking-rent-slider {
   height: 12px;
   width: 30%;
   float: left;
+  margin-right: -60px;
 
 }
 
@@ -502,14 +503,26 @@ div#market-deal {
 .prop-type-deal-style {
 
   height: 12px;
-  margin-left: 5px;
-  width: 30%;
+  margin-right: -60px;
+  width: 24%;
   float: left;
 
 }
 
+div#upside-slider {
+
+  margin-top: 6em;
+  padding-left: 20px !important;
+  height: 700px !important;
+
+}
+
+#show-properties-button {
+  height: 42px;
+}
+
 div#prop-type-deal {
-  width: 52%;
+  width: 50%;
 }
 
 input#year-built-min {
@@ -536,9 +549,21 @@ div#deal-layout {
   margin-left: 5em;
 }
 
+div#demo-deal {
+  width: 160%;
+}
+
+div#location-deal {
+  width: 160%;
+}
+
+div#overlay {
+  padding: 10px 0px 10px 0px;
+}
+
 .row-1-deal {
   height: 5em;
-  width: 95%;
+  width: 98%;
   margin-left: 0px;
 }
 
@@ -554,10 +579,10 @@ div#map-deal {
   width: 565%;
   height:700px;
   float: left;
-  margin-left: 1em;
+  margin-left: 2em;
 }
 
-div#checklist-deal {
+.deal-checklist {
   width: 150%;
 }
 

@@ -3,6 +3,7 @@ import pandas as pd
 import seaborn as sns
 import scipy as stats
 import sklearn
+import xgboost as xgb
 from sklearn.model_selection import train_test_split
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder, MinMaxScaler, OrdinalEncoder
@@ -32,13 +33,9 @@ gmaps = googlemaps.Client(key='AIzaSyC0XCzdNwzI26ad9XXgwFRn2s7HrCWnCOk')
 import mapbox
 from mapbox import Geocoder
 MAPBOX_ACCESS_TOKEN='pk.eyJ1Ijoia2V2YWxzaGFoIiwiYSI6ImNqbW1nbG90MDBhNTQza3IwM3pvd2I3bGUifQ.dzdTsg69SdUXY4zE9s2VGg'
-
 # Must be a public token, starting with `pk`
 token = MAPBOX_ACCESS_TOKEN
 geocoder = mapbox.Geocoder(access_token=token)
-
-# Read SF Multi-Family data
-LeaseComp_sf_la_mf = pd.read_csv(os.getcwd() + "/data/LeaseComp_sf_la_mf_agg_v11_raw.csv")
 
 # AWS SageMaker
 import boto3
@@ -51,24 +48,37 @@ from sagemaker.xgboost import XGBoost, XGBoostModel
 from sagemaker.session import Session
 from sagemaker.local import LocalSession
 
+# mysql connection
+import pymysql
+from sqlalchemy import create_engine
+user = 'stroom'
+pwd = 'Stroomrds'
+host =  'aa1jp4wsh8skxvw.csl5a9cjrheo.us-west-1.rds.amazonaws.com'
+port = 3306
+database = 'stroom_main'
+engine = create_engine("mysql+pymysql://{}:{}@{}/{}".format(user,pwd,host,database))
+con = engine.connect()
+
 # Read ML data
-df_lease = pd.read_csv(os.getcwd() + "/data/LeaseComp_sf_la_mf_agg_v13_ml.csv")
+df_lease = pd.read_csv(os.getcwd() + "/data/df_ml_v1_march.csv")
+
+df_raw = pd.read_csv(os.getcwd() + "/data/df_raw_v1_march.csv")
 
 # Drop column
-df_lease.drop(df_lease.filter(regex="Unname"),axis=1, inplace=True)
+df_lease.drop(df_lease.filter(regex="Unname"), axis=1, inplace=True)
 
 # Subset cols
 df_sub = df_lease[['Year Built',
                    'Size',
-                   'Most Recent Physical Occupancy',
-                   'Operating Expenses at Contribution',
+                   'Most Recent Physical Occupancy', # average of comps
+                   'Operating Expenses at Contribution', # average of comps
                    'WalkScore',
                    'TransitScore',
                    'geohash',
-                   'EstRentableArea',
-                   'Loan Status',
+                   'EstRentableArea', # gross area
+                   'Loan Status', # mode of geo
                    'EstValue',
-                   'CapRate',
+                   'CapRate', # average of comps
                    'Ownership',
                    'AirCon',
                    'Pool',
@@ -79,6 +89,7 @@ df_sub = df_lease[['Year Built',
                    'propertyTaxAmount',
                    'taxRate',
                    'Rent_1Br',
+                   'mos_since_last_sale',
                    'Revenue_per_sqft_month']]
 
 
@@ -88,55 +99,28 @@ df_sub['Most Recent Physical Occupancy'] = df_sub['Most Recent Physical Occupanc
 df_sub['Operating Expenses at Contribution'] = df_sub['Operating Expenses at Contribution'].apply(clean_currency).astype('float')
 
 # split df into train and test
-X_train, X_test, y_train, y_test = train_test_split(df_sub.iloc[:,0:21], df_sub.iloc[:,-1], test_size=0.1, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(df_sub.iloc[:,0:22], df_sub.iloc[:,-1], test_size=0.1, random_state=42)
 
 # Encode categorical variables
 cat_vars = ['geohash','Loan Status','Ownership','AirCon','Pool','Condition','constructionType','parkingType']
 cat_transform = ColumnTransformer([('cat', OneHotEncoder(handle_unknown='ignore'), cat_vars)], remainder='passthrough')
 
-encoder = cat_transform.fit(X_train)
+encoder = cat_transform.fit(df_sub.iloc[:,0:22])
 
-
-# Append row to LeaseSample Pandas DataFrame
-def append_prop(tenant, industry, address, city, zipcode, state, proptype, leasetype, propclass, floor, built, renovated, startdt, enddt, sqft, rentask, rentner, rentesc, free, ti, lf, opex):
-
-    global LeaseComp_sf_la_mf
-
-    # Get Lat, Long coordinates
-    if address and city and state and zipcode:
-
-        address_str = address + "," + city + "," + state + " " + zipcode
-
-        loc = gmaps.geocode(address_str)
-        lat = loc[0]['geometry']['location']['lat']
-        lng = loc[0]['geometry']['location']['lng']
-
-        # Get Walk and Transit scores
-        Walk = walkscore(lat, lng, address_str, 'walk')
-        Transit = walkscore(lat, lng, address_str, 'transit')
-
-        vlist = [gen_ids(12), gen_ids(10), industry, tenant, sqft, renovated, floor, proptype, propclass, built, startdt, leasetype, enddt, city, rentner, lat, lng, address_str, zipcode, Walk, Transit]
-        cols = ['LeaseID', 'PropertyID', 'Tenant Industry', 'Tenant', 'Square Footage', 'Year Renovated', 'Building Floor', 'Property Type', 'Building Class', 'Year Built', 'Commencement Date', 'Lease Type', 'Expiration Date', 'City', 'Rent', 'Lat', 'Long', 'Address', 'zipcode', 'WalkScore', 'TransitScore']
-
-        # Using zip() to convert lists to dictionary
-        res = dict(zip(cols, vlist))
-
-        # Create pandas DataFrame for new row addition
-        LeaseComp_sf_la_mf = LeaseComp_sf_la_mf.append(res, ignore_index=True)
 
 # Calculate distance between properties
 # Define radius and find similar leases executed recently within the proximity.
-def calc_distance(prop_loc, Lat, Long, prop_id):
+def calc_distance(prop_loc, Lat, Long):
 
     prop_locs = (Lat, Long)
 
     dist = geopy.distance.distance(prop_loc, prop_locs).miles
 
-    return (dist, prop_id)
+    return dist
 
 
 # Function to calculate optimal rent.
-def calc_rent(prop_address, proptype, yr_built, space, units, ameneties, assval, occupancy, opex, taxAmt, taxRate, rent, geohash):
+def calc_rent(prop_address, proptype, yr_built, space, units, ameneties, assval, occupancy, opex, taxAmt, taxRate, rent, lastSaleDate, geohash):
 
     np.random.seed(0)
 
@@ -152,6 +136,15 @@ def calc_rent(prop_address, proptype, yr_built, space, units, ameneties, assval,
     Walk = walkscore(Lat, Long, prop_address, 'walk')
     Transit = walkscore(Lat, Long, prop_address, 'transit')
 
+    # Format date
+    if len(lastSaleDate) <= 10:
+        lastSaleDate = datetime.strptime(lastSaleDate, '%Y-%m-%d')
+    else:
+        lastSaleDate = datetime.strptime(lastSaleDate, '%Y-%m-%dT%H:%M:%S').strftime('%Y-%m-%d')
+        lastSaleDate = datetime.strptime(lastSaleDate, '%Y-%m-%d')
+
+    # Calculate Months since last sale date
+    mosLastSale = (pd.to_datetime('today') - lastSaleDate)/np.timedelta64(1, 'M')
 
     '''
     AWS endpoint invoke code
@@ -165,7 +158,6 @@ def calc_rent(prop_address, proptype, yr_built, space, units, ameneties, assval,
     )
 
     sagemaker_client = sagemaker.session.Session(boto_session = client)
-
 
     # Create a test data point and save to csv - the input format for SageMaker Endpoint
     df = pd.DataFrame({
@@ -189,10 +181,12 @@ def calc_rent(prop_address, proptype, yr_built, space, units, ameneties, assval,
                                'parkingType': np.random.choice(df_sub['parkingType'], 1)[0],
                                'numberOfBuildings': df_sub['numberOfBuildings'].median(),
                                'propertyTaxAmount': taxAmt,
+                               'taxRate': taxRate,
                                'Rent_1Br': rent,
-                               'taxRate': taxRate
+                               'mos_since_last_sale': mosLastSale
 
                         }, index=[0])
+
 
     # Encode to handle categorical variables
     testpoint = encoder.transform(df).toarray().tolist()
@@ -207,13 +201,13 @@ def calc_rent(prop_address, proptype, yr_built, space, units, ameneties, assval,
 
     payload = ', '.join(map(str, testpoint[0]))
 
+
     '''
     Endoint Name
     '''
 
     # Predict method
-    endpoint_name = "sagemaker-xgboost-2022-01-26-03-19-51-000"
-
+    endpoint_name = "sagemaker-xgboost-2022-03-29-19-22-30-787"
 
     predictor = Predictor(
                           endpoint_name = endpoint_name,
@@ -229,118 +223,115 @@ def calc_rent(prop_address, proptype, yr_built, space, units, ameneties, assval,
 
     print("Predicted value", res)
 
+
     '''
-    Cosine similarity code
+    Query to pull nearby comps - Default to 1 mile radius
     '''
 
-    # Create a dataframe of subject property from comps tab -- (Ideally this will be pulled in through Reonomy API)
-    df = pd.DataFrame({
-                       'Area': int(space),
-                       'Year Built': int(yr_built),
-                       'Most Recent Physical Occupancy': occupancy,
-                       'WalkScore': Walk,
-                       'taxRate': taxRate,
-                       #'ameneties': ameneties
-                     }, index=[1])
+    # CMBS data
+    # Run query within a while-loop to get the required # of rows
+    df_raw = pd.DataFrame({})
+    rows = df_raw.shape[0]
 
-    ### COSINE SIMILARITY CALCULATIONS
+    # search radius - miles to meters
+    radius = 1*1609
 
-    # Apply a function to calculate distance from the subject property to Lease Sample DataFrame
-    dist = LeaseComp_sf_la_mf.apply(lambda x: calc_distance(prop_loc, x['Lat'], x['Long'], x['PropertyID']), axis=1)
+    # Between 20 to 30 results in comps set
+    while rows <= 30:
 
-    # Convert tuple to dictionary - property id = key and Lat / Long = value
-    dist_dict = dict((y, x) for x, y in dist)
+        # Run query
+        query = '''
+                select * from stroom_main.df_raw_v1_march
+                where st_distance_sphere(Point({},{}), coords) <= {};
+                '''.format(Long, Lat, radius)
 
-    # Set radius based on geo filter
-    radius = 1.5 # Default
+        df_raw = pd.read_sql(query, con)
 
-    # Filter by properties located within x mile radius
-    dist_dict_filter = {key: value for key, value in dist_dict.items() if value <= radius}
+        rows = df_raw.shape[0]
 
-    # If no properties are within default geofilter radius, then 2x / expand the radius
-    if bool(dist_dict_filter) == False:
-        # update value of radius for drawing circle
-        radius = 2*radius
+        if rows >= 20:
+            break
+        else:
+            radius = radius * 2
 
-        dist_dict_filter = {key: value for key, value in dist_dict.items() if value <= radius}
 
-    # Sample dataframe to include only property ids
-    LeaseSamplev2 = LeaseComp_sf_la_mf[LeaseComp_sf_la_mf['PropertyID'].isin(list(dist_dict_filter.keys()))]
+    # Non CMBS data
 
-    # Subset Features to be compared for similarity
-    cols = ['PropertyID','EstRentableArea','Year Built','Most Recent Physical Occupancy','WalkScore','taxRate']
-    dfComp = LeaseSamplev2[[c for c in LeaseSamplev2.columns if c in cols]]
+    # Get the state to be passed into the query
+    if geocode_result[0]['address_components'][5]['types'][0] == 'administrative_area_level_1':
 
-    # Clean up
-    dfComp['Most Recent Physical Occupancy'] = dfComp['Most Recent Physical Occupancy'].apply(clean_percent).astype('float')
+        state = geocode_result[0]['address_components'][5]['short_name'].lower()
 
-    # Making up ameneties data for comparables
-    #dfComp['ameneties'] = ameneties
+        # Run query within a while-loop to get the required # of rows
+        df_comps = pd.DataFrame({})
+        rows = df_comps.shape[0]
 
-    dfComp = dfComp.reset_index()
+        # search radius - miles to meters
+        radius = 1*1609
 
-    # Calculate cosine similarity - all rows, 5 columns - - drop PropertyID
-    dfCompv1 = dfComp.iloc[:,2:7]
+        # Between 20 to 30 results in comps set
+        while rows <= 30:
 
-    df.fillna(0, inplace=True)
-    dfCompv1.fillna(0, inplace=True)
+            # Run query
+            query = '''
 
-    # Apply cosine similarity - df = subject property and dfCompv1 = comparables
-    cos_arr = cosine_similarity(df.values, dfCompv1.values)
+                    SELECT ds.*, AVG(dzr.price) as avg_rent
+                    FROM stroom_main.df_zillow_{} ds
+                    JOIN stroom_main.df_zillow_rent dzr
+                        ON ds.id = dzr.id
+                    GROUP BY ds.id
+                    HAVING ds.geomatch = 'no match'
+                    AND st_distance_sphere(Point({},{}), ds.coords) <= {}
+                    AND avg_rent <= 10000;
 
-    # Store cosine similarity scores in an array
-    cos_lst = []
+                    '''.format(state, Long, Lat, radius)
 
-    for i in cos_arr[0]:
-        cos_lst.append(i)
+            df_comps = pd.read_sql(query, con)
 
-    # Create dataframe with propertyID and Similarity measure.
-    dfSimilarity = pd.DataFrame({
-                                 'PropertyID': dfComp['PropertyID'],
-                                 'Cos_sim': cos_lst
-                               })
+            rows = df_comps.shape[0]
 
-    # Scale cosine similarity measure
-    scaler = MinMaxScaler(feature_range=(0.1,100))
+            if rows >= 20:
+                break
+            else:
+                radius = radius * 2
 
-    # Calculate Rent based on Square foot area * Revenue Per Square Feet
-    LeaseSamplev2['Revenue_per_sqft_month'].replace([np.inf, -np.inf], np.nan, inplace=True)
-    LeaseSamplev2 = LeaseSamplev2[LeaseSamplev2['Revenue_per_sqft_month'].notna()]
-
-    # Create new column for Revenue Per Sq.ft / Year
-    LeaseSamplev2['Revenue_per_sqft_year'] = LeaseSamplev2['Revenue_per_sqft_month'] * 12
-    LeaseSamplev2['Revenue_per_sqft_year'] = LeaseSamplev2['Revenue_per_sqft_year'].apply('${:,.1f}'.format)
+    # Add additional cols
+    df_raw['Revenue_per_sqft_year'] = df_raw['Revenue_per_sqft_month'] * 12
+    df_raw['Revenue_per_sqft_year'] = df_raw['Revenue_per_sqft_year'].apply('${:,.1f}'.format)
 
     # Monthly Revenue / Unit / Month
-    LeaseSamplev2['EstRevenueMonthly'] = (LeaseSamplev2['Preceding Fiscal Year Revenue']/LeaseSamplev2['Size'])/12
+    df_raw['EstRevenueMonthly'] = (df_raw['Preceding_Fiscal_Year_Revenue']/df_raw['Size'])/12
 
-    # Add distance from subject property column
-    LeaseSamplev2['Distance'] = LeaseSamplev2['PropertyID'].map(dist_dict_filter)
+    # Apply a function to calculate distance from the subject property to Lease Sample DataFrame
+    df_comps['Distance'] = df_comps.apply(lambda x: calc_distance(prop_loc, x['Lat'], x['Long']), axis=1)
+    df_raw['Distance'] = df_raw.apply(lambda x: calc_distance(prop_loc, x['Lat'], x['Long']), axis=1)
 
-    # Use similarity measures as weights
-    dfSimilarity['Weights'] = scaler.fit_transform(dfSimilarity[['Cos_sim']])
+    # Apply distance filter (In miles)
+    df_comps_dist = df_comps[df_comps['Distance'] <= radius/1609]
+    df_raw_dist = df_raw[df_raw['Distance'] <= radius/1609]
 
-    # All properties in Comp set
-    dfCompSet = pd.merge(dfSimilarity, LeaseSamplev2, how='inner', left_on='PropertyID', right_on='PropertyID')
+    # Fill NAs
+    df_comps_dist.fillna(0, inplace=True)
+    df_raw_dist.fillna(0, inplace=True)
 
-    # Drop duplications
-    dfCompSet.drop_duplicates(subset=['Property Name','Zip Code'], keep='last', inplace=True)
+    df_comps_dist.replace('nan', 0, inplace=True)
+    df_raw_dist.replace('nan', 0, inplace=True)
 
-    dfCompSetv1 = dfCompSet.sort_values(by=['EstRevenueMonthly'], ascending=False)
+    # To numeric
+    df_comps_dist['unit_count'] = pd.to_numeric(df_comps_dist['unit_count'], errors="coerce")
+    df_comps_dist['unit_count'] = df_comps_dist['unit_count'].astype(int)
 
-    # Calculate weighted average rental price
-    dfSimilarityv1 = pd.merge(dfSimilarity, LeaseSamplev2[['PropertyID','EstRevenueMonthly','Opex']], how='inner', left_on='PropertyID', right_on='PropertyID')
+    df_raw_dist['Size'] = pd.to_numeric(df_raw_dist['Size'], errors="coerce")
+    df_raw_dist['Size'] = df_raw_dist['Size'].astype(int)
 
-    # Datatype consistency
-    dfSimilarityv1['Weights'] = dfSimilarityv1['Weights'].astype(float)
+    # Apply units / size filter
+    lower_bound = int(units - (35*units)/100)
+    upper_bound = int(units + (35*units)/100)
 
-    # Sort by similarity weight and sample top n rows -- This will likely elimimate the low income / affordable housing
-    dfSimilarityv2 = dfSimilarityv1.sort_values(by=['EstRevenueMonthly'], ascending=False)
+    df_comps_size = df_comps_dist[(df_comps_dist['unit_count'] >= lower_bound) & (df_comps_dist['unit_count'] <= upper_bound)]
+    df_raw_size = df_raw_dist[(df_raw_dist['Size'] >= lower_bound) & (df_raw_dist['Size'] <= upper_bound)]
 
-    # Top 10 similar properties
-    dfSimilarityv2 = dfSimilarityv2.head(10)
+    df_raw_size.sort_values(by='Size', ascending=False)
+    df_comps_size.sort_values(by='unit_count', ascending=False)
 
-    #  Use weights of top 10 similar properties
-    calc_rent = round(np.average(dfSimilarityv2['EstRevenueMonthly'], weights = dfSimilarityv2['Weights']),2)
-
-    return {'y_pred': res,  'price' : calc_rent, 'df_lease' : dfCompSetv1.head(15), 'radius': radius}
+    return {'y_pred': res, 'df_cmbs': df_raw_size.head(20), 'df_noncmbs': df_comps_size.head(20), 'radius': radius}

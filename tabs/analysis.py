@@ -44,7 +44,6 @@ import googlemaps
 gmaps = googlemaps.Client(key="AIzaSyC0XCzdNwzI26ad9XXgwFRn2s7HrCWnCOk")
 
 # Google cloud + Big Query
-# os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.getcwd() + stroom-data-exploration-ebf3ef8e9bf0.json
 from google.cloud import bigquery
 import pyarrow
 client = bigquery.Client(project = "stroom-data-exploration")
@@ -258,7 +257,7 @@ def demo_data(market, comps_store):
         # Median Income
         cres = c.acs5.state_county(
                                    'B19013_001E',
-                                   states.CA.fips,
+                                   result['States'][0]['STATE'],
                                    result['County Subdivisions'][0]['COUNTY']
                                   )
 
@@ -266,16 +265,16 @@ def demo_data(market, comps_store):
 
         # Median Home Value
         cres = c.acs5.state_county('B25077_001E',
-                           states.CA.fips,
-                           result['County Subdivisions'][0]['COUNTY']
-                          )
+                                   result['States'][0]['STATE'],
+                                   result['County Subdivisions'][0]['COUNTY']
+                                  )
 
         home_value = '${:,.0f}'.format(cres[0]['B25077_001E'])
 
         # Population
         cres = c.acs5.state_county(
                                    'B01003_001E',
-                                   states.CA.fips,
+                                   result['States'][0]['STATE'],
                                    result['County Subdivisions'][0]['COUNTY']
                                   )
 

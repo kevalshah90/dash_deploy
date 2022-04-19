@@ -29,9 +29,9 @@ application.layout = html.Div([
                         # header
                         html.Div([
 
-                            html.H2("Stroom Product Suite ®", style={"float":"center",
-                                                                     "margin-left":"40%",
-                                                                     "margin-top":"30px"}),
+                            # html.H2("Stroom Product Suite ®", style={"float":"center",
+                            #                                          "margin-left":"40%",
+                            #                                          "margin-top":"30px"}),
 
                             html.Div(
 

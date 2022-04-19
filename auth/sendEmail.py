@@ -16,10 +16,10 @@ def sendMail(email_to):
     # content = Content("text/plain", "Your password is 123")
 
     # localhost
-    html_content= Content("text/html","<strong>Please click below link to reset password :</strong><br/><br/><a href='http://localhost:8000/updatePassword/"+token+"'>Reset Password</a>")
+    # html_content= Content("text/html","<strong>Please click below link to reset password :</strong><br/><br/><a href='http://localhost:8000/updatePassword/"+token+"'>Reset Password</a>")
 
     # production
-    #html_content= Content("text/html","<strong>Please click below link to reset password :</strong><br/><br/><a href='https://application.stroomcre.com/updatePassword/"+token+"'>Reset Password</a>")
+    # html_content= Content("text/html","<strong>Please click below link to reset password :</strong><br/><br/><a href='https://application.stroomcre.com/updatePassword/"+token+"'>Reset Password</a>")
 
     mail = Mail(from_email, to_email, subject, html_content)
     response = sg.client.mail.send.post(request_body=mail.get())

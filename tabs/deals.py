@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import os
 import json
+import geojson
 import ast
 import dash
 from dash.dependencies import Input, Output, State
@@ -17,13 +18,27 @@ from application import application
 from datetime import date, datetime, timedelta
 from collections import defaultdict
 import mapbox
+import geocoder
 import geopandas as gpd
 import shapely.geometry
 from scipy import spatial
 from dash.dash import no_update
 from dash.exceptions import PreventUpdate
+import io
+from urllib.request import urlopen
+from funcs import clean_percent, clean_currency, get_geocodes, create_presigned_url, streetview, coords_dict, nearby_places, sym_dict
 
-from funcs import clean_percent, clean_currency, get_geocodes, create_presigned_url, streetview, coords_dict
+# US Census libraries and API key
+import censusgeocode as cg
+from census import Census
+from us import states
+c = Census("71a69d38e3f63242eca7e63b8de1019b6e9f5912")
+
+# AWS credentials
+import boto3
+aws_id = 'AKIA2MQCGH6RW7TE3UG2'
+aws_secret = '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'
+s3 = boto3.client('s3')
 
 # Google Maps API key
 import googlemaps
@@ -35,8 +50,21 @@ token = MAPBOX_KEY
 Geocoder = mapbox.Geocoder(access_token=token)
 
 # Read data
-df_lease_mf = pd.read_csv(os.getcwd() + "/data/LeaseComp_mf_ml_forecasted_v1.csv")
+df_lease_mf = pd.read_csv(os.getcwd() + "/data/df_forecast_v1_march.csv")
 Market_List = list(df_lease_mf['MSA'].unique())
+
+# Read geo data with census geometries from AWS S3
+s3_client = boto3.client('s3',
+                         aws_access_key_id='AKIA2MQCGH6RW7TE3UG2',
+                         aws_secret_access_key='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')
+
+# Read census tract level geometries and geo data
+url = 'https://stroom-images.s3.us-west-1.amazonaws.com/uscensusgeo.geojson'
+
+with urlopen(url) as response:
+    geo_json = json.load(response)
+
+df_geo = gpd.read_file(url)
 
 # App Layout for designing the page and adding elements
 layout = html.Div([
@@ -101,7 +129,7 @@ layout = html.Div([
                                           persistence_type="memory",
                                           placeholder="Max"
                                          ),
-                            ], style = {"height":"44px"},
+                            ], style = {"height":"44px", "padding-left":"20px"},
 
                         ),
 
@@ -127,24 +155,73 @@ layout = html.Div([
 
                         ),
 
+                        dbc.Button("Show Properties", id="show-properties-button", size="lg", className="mr-1", n_clicks=0),
+
+
                    ], className="row-1-deal"),
+
 
                    dbc.Row(
                        [
 
                          dbc.Col(
 
-                            dcc.Checklist(
-                               options=[
-                                   {'label': 'Rental Growth', 'value': 'Rent'},
-                                   {'label': 'Population', 'value': 'Pop'},
-                                   {'label': 'Income', 'value': 'Income'},
-                               ],
-                               id = 'checklist-deal',
-                               value='Rent'
+                           dbc.InputGroup(
+                               [
+
+                                  dbc.Label("Layers"),
+                                  dcc.Checklist(
+                                                id = "overlay",
+                                                options=[{'label':'Overlay', 'value':'overlay'}]
+                                  ),
+
+                                  dbc.Label("Demographics"),
+                                  dcc.Dropdown(
+
+                                                 id="demo-deal",
+                                                 persistence=True,
+                                                 persistence_type="memory",
+                                                 options=[
+                                                          {'label': 'Home Value', 'value': 'Home'},
+                                                          {'label': 'Population', 'value': 'Pop'},
+                                                          {'label': 'Income', 'value': 'Income'},
+                                                          {'label': 'Price-Rent Ratio', 'value': 'Price_Rent_Ratio'},
+                                                          {'label': 'Bachelor\'s', 'value': 'Bachelor'},
+                                                          {'label': 'Graduate', 'value': 'Graduate'}
+                                                 ],
+                                                 value=""
+
+                                  ),
+
+                                  dbc.Label("Neighborhood"),
+                                  dcc.Dropdown(
+
+                                                 id="location-deal",
+                                                 persistence=True,
+                                                 persistence_type="memory",
+                                                 options=[
+
+                                                          {'label': 'Transit', 'value': 'Transit'},
+                                                          {'label': 'Grocery', 'value': 'Grocery'},
+                                                          {'label': 'School', 'value': 'School'},
+                                                          {'label': 'Hospital', 'value': 'Hospital'},
+                                                          {'label': 'Worship', 'value': 'Worship'},
+                                                          {'label': 'Food/Cafe', 'value': 'Food/Cafe'},
+                                                          {'label': 'Gas', 'value': 'Gas'}
+
+                                                 ],
+                                                 value=""
+
+                                  ),
+
+
+                               ], style={"width":"175%"},
                             ),
 
-                         width={"size": 1, "order": "first"}),
+                            width={"size": 1, "order": "first"},
+                            className="deal-dropdown",
+
+                         ),
 
 
                          dbc.Col(
@@ -153,12 +230,13 @@ layout = html.Div([
 
                                 # Plot properties map
                                 dcc.Graph(id="map-deal",
-                                          style={"display": "inline-block", "width": "592%", "float": "left", "height":"700px"}
+                                          style={"display": "inline-block", "width": "566%", "float": "left", "height":"700px"}
                                           ),
 
                                 ], className="deal-map-style"),
 
-                         width={"size": 2, "order": "last"}),
+
+                         width={"size": 2}),
 
 
                          dbc.Col([
@@ -195,16 +273,12 @@ layout = html.Div([
                                                 dbc.Label("Property:", id="Property_deal"),
                                                 html.Br(),
 
+                                                dbc.Label("Avg. Rent:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
+                                                dbc.Label("Rent:", id="Rent_deal"),
+                                                html.Br(),
+
                                                 dbc.Label("Fiscal Revenue:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
                                                 dbc.Label("Revenue:", id="Revenue_deal"),
-                                                html.Br(),
-
-                                                dbc.Label("Revenue / Unit / Month:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
-                                                dbc.Label("Revenue / Month:", id="Monthly_Revenue_deal"),
-                                                html.Br(),
-
-                                                dbc.Label("Rental rate / Sq.ft / Month:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
-                                                dbc.Label("Rental Rate:", id="Rent_Sqft_deal"),
                                                 html.Br(),
 
                                                 dbc.Label("Occupancy:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
@@ -330,173 +404,336 @@ layout = html.Div([
                       [
 
                           Input("market-deal", "value"),
+                          Input("overlay", "value"),
+                          Input("demo-deal", "value"),
+                          Input("location-deal", "value"),
                           Input("prop-type-deal", "value"),
                           Input("year-built-min", "value"),
                           Input("year-built-max", "value"),
                           Input("num-units-min", "value"),
-                          Input("num-units-max", "value")
+                          Input("num-units-max", "value"),
+                          Input("show-properties-button", "n_clicks"),
+                          Input("map-deal", "relayoutData")
 
                       ],
                       )
-def update_map_deal(market, proptype, year_built_min, year_built_max, num_units_min, num_units_max):
+def update_map_deal(market, overlay, demo_dropdown, loc_dropdown, proptype, year_built_min, year_built_max, num_units_min, num_units_max, show_properties_nclicks, mapdata):
 
-    # Adjust map view
+    # check for triggered inputs / states
+    ctx = dash.callback_context
+
+    # Adjust map view - Set Defaults
     lat, long = get_geocodes(market)
 
     coords = coords_dict[market]
 
-    layout_lat = coords[0]
-    layout_lon = coords[1]
-
     zoom = 10
+
+    # Look up State and County info
+    result = cg.coordinates(x=long, y=lat)
 
     datad = []
 
-    if proptype == "Multi-Family":
+    if mapdata:
+
+        if 'mapbox.center' in mapdata and 'mapbox.zoom' in mapdata:
+
+            # Set coords
+            coords[0] = mapdata['mapbox.center']['lat']
+            coords[1] = mapdata['mapbox.center']['lon']
+
+            # Set zoom level
+            zoom = mapdata['mapbox.zoom']
+
+    if proptype == "Multi-Family" and market and show_properties_nclicks > 0:
 
         # Plot sample properties - match with starting view of the map
-        df = df_lease_mf[df_lease_mf['MSA'] == market]
+        df_msa = df_lease_mf[df_lease_mf['MSA'] == market]
 
         # Apply filters
-        df_lease_mf['Year Built'] = df_lease_mf['Year Built'].astype(int)
+        df_msa['Year Built'] = df_msa['Year Built'].astype(int)
+
+        df_msa['Size'] = df_msa['Size'].astype(int)
 
         if year_built_min and year_built_max:
-            df = df_lease_mf[(df_lease_mf['Year Built'] >= int(year_built_min)) & (df_lease_mf['Year Built'] <= int(year_built_max))]
-
-
-        df_lease_mf['Size'] = df_lease_mf['Size'].astype(int)
+            df_msa = df_msa[(df_msa['Year Built'] >= int(year_built_min)) & (df_msa['Year Built'] <= int(year_built_max))]
 
         if num_units_min and num_units_max:
-            df = df_lease_mf[(df_lease_mf['Size'] >= int(num_units_min)) & (df_lease_mf['Size'] <= int(num_units_max))]
-
+            df_msa = df_msa[(df_msa['Size'] >= int(num_units_min)) & (df_msa['Size'] <= int(num_units_max))]
 
         # Generate Address string
         addr_cols = ["Address", "City", "State", "Zip Code"]
-        df['Address_Comp'] = df[addr_cols].apply(lambda row: ' '.join(row.values.astype(str)), axis=1)
-
-        # Hover Info
-        propname = df['Property Name']
+        df_msa['Address_Comp'] = df_msa[addr_cols].apply(lambda row: ' '.join(row.values.astype(str)), axis=1)
 
         # Monthly Revenue / Unit / Month
-        df['EstRevenueMonthly'] = (df['Preceding Fiscal Year Revenue']/df['Size'])/12
+        df_msa['EstRevenueMonthly'] = (df_msa['Preceding Fiscal Year Revenue']/df_msa['Size'])/12
 
         # Format Columns
-        df['EstValue'] = df['EstValue'].apply('${:,.0f}'.format)
-        df['Preceding Fiscal Year Revenue'] = df['Preceding Fiscal Year Revenue'].apply('${:,.0f}'.format)
-        df['Occ.'] = df['Occ.'].apply(clean_percent)
+        df_msa['EstValue'] = df_msa['EstValue'].apply('${:,.0f}'.format)
+        df_msa['Preceding Fiscal Year Revenue'] = df_msa['Preceding Fiscal Year Revenue'].apply('${:,.0f}'.format)
+        df_msa['Occ.'] = df_msa['Occ.'].apply(clean_percent)
+
+        # Filter by potential upside
+        df1 = df_msa[(df_msa['diff_potential'] >= 0) & (df_msa['diff_potential'] <= 80)]
+
+        # Hover Info
+        propname = df1['Property Name']
 
         # Columns for customdata
-        cd_cols = ['Property Name','Address_Comp','Size','Year Built','Property Type','Preceding Fiscal Year Revenue','EstRevenueMonthly','Revenue_per_sqft_month','Occ.','EstRentableArea','EstValue','lastSaleDate']
+        cd_cols = ['Property Name','Address_Comp','Size','Year Built','Property Type','avg_price','Preceding Fiscal Year Revenue','Occ.','EstRentableArea','EstValue','lastSaleDate']
 
         datad.append({
 
                         "type": "scattermapbox",
-                        "lat": df['Lat'],
-                        "lon": df['Long'],
+                        "lat": df1['Lat'],
+                        "lon": df1['Long'],
                         "name": "Location",
                         "hovertext": propname,
                         "showlegend": False,
                         "hoverinfo": "text",
                         "mode": "markers",
                         "clickmode": "event+select",
-                        "customdata": df.loc[:,cd_cols].values,
+                        "customdata": df1.loc[:,cd_cols].values,
                         "marker": {
                             "autocolorscale": False,
                             "showscale":True,
                             "symbol": "circle",
                             "size": 9,
                             "opacity": 0.8,
-                            "color": df['yhat'],
-                            "colorscale": "blues",
+                            "color": df1['diff_potential'],
+                            "colorscale": "Portland",
+                            "cmin":df1[df1['diff_potential'] > 0]['diff_potential'].min(),
+                            "cmax":df1['diff_potential'].max(),
                             "colorbar":dict(
                                             title= 'Upside',
-                                            orientation= 'h',
-                                            #nticks=10,
+                                            orientation= 'v',
+                                            side= 'left',
                                             showticklabels=True,
                                             thickness= 20,
                                             tickformatstops=dict(dtickrange=[0,10]),
                                             titleside= 'top',
                                             ticks= 'outside'
-                                            #ticklen= 1
                                            )
                             }
                      }
         )
 
-        # Choroplethmapbox
 
-        # datad.append({
-        #
-        #                 "type": "Choroplethmapbox",
-        #                 "geojson": ,
-        #                 "name": "Location",
-        #                 "hovertext": propname,
-        #                 "showlegend": False,
-        #                 "hoverinfo": "text",
-        #                 "mode": "markers",
-        #                 "clickmode": "event+select",
-        #                 "customdata": df.loc[:,cd_cols].values,
-        #                 "marker": {
-        #                     "autocolorscale": False,
-        #                     "showscale":True,
-        #                     "symbol": "circle",
-        #                     "size": 9,
-        #                     "opacity": 0.8,
-        #                     "color": df['yhat'],
-        #                     "colorscale": "blues",
-        #                     "colorbar":dict(
-        #                                     title= 'Upside',
-        #                                     orientation= 'h',
-        #                                     #nticks=10,
-        #                                     showticklabels=True,
-        #                                     thickness= 20,
-        #                                     tickformatstops=dict(dtickrange=[0,10]),
-        #                                     titleside= 'top',
-        #                                     ticks= 'outside'
-        #                                     #ticklen= 1
-        #                                    )
-        #                     }
-        #              }
-        # )
+
+    elif proptype == "Multi-Family" and market and show_properties_nclicks <= 0:
+
+        datad.append({
+
+                        "type": "scattermapbox",
+                        "lat": coords[0],
+                        "lon": coords[1],
+                        "name": "Location",
+                        "hovertext": "",
+                        "showlegend": False,
+                        "hoverinfo": "text",
+                        "mode": "markers",
+                        "clickmode": "event+select",
+                        "marker": {
+                            "symbol": "circle",
+                            "size": 9,
+                            "opacity": 0.8
+                            }
+                     }
+        )
 
 
 
+    # Choroplethmapbox
+    if demo_dropdown:
+
+        if 'mapbox.center' in mapdata and 'mapbox.zoom' in mapdata:
+
+            # set coords
+            coords[0] = mapdata['mapbox.center']['lat']
+            coords[1] = mapdata['mapbox.center']['lon']
+
+            # set zoom level
+            zoom = mapdata['mapbox.zoom']
+
+        df_geo_sub = df_geo[df_geo['MSA'] == market]
+
+        if demo_dropdown == "Home":
+            df = df_geo_sub[df_geo_sub['Median_Home_Value'] > 0]
+            s = df['Median_Home_Value'].astype(float)
+            label = "Median Home Value"
+
+        elif demo_dropdown == "Pop":
+            s = df_geo_sub['Population'].astype(float)
+            label = "Population"
+
+        elif demo_dropdown == "Income":
+            df = df_geo_sub[df_geo_sub['Median_HH_Income'] > 0]
+            s = df['Median_HH_Income'].astype(float)
+            label = "Median Income"
+
+        elif demo_dropdown == "Price_Rent_Ratio":
+            df = df_geo_sub[(df_geo_sub['price_rent_ratio'] > 0) & (df_geo_sub['price_rent_ratio'] < 80)]
+            s = df['price_rent_ratio'].astype(float)
+            label = "Price to Rent Ratio"
+
+        elif demo_dropdown == "Bachelor":
+            df = df_geo_sub[df_geo_sub['Bachelor\'s Degree'] > 0]
+            s = df['Bachelor\'s Degree'].astype(float)
+            label = "Bachelor\'s Degree"
+
+        elif demo_dropdown == "Graduate":
+            df = df_geo_sub[df_geo_sub['Graduate or Professional Degree'] > 0]
+            s = df['Graduate or Professional Degree'].astype(float)
+            label = "Graduate Degree"
+
+        if not overlay:
+            datad.clear()
+
+        datad.append({
+
+                        "type": "choroplethmapbox",
+                        "geojson": geo_json,
+                        "locations": df_geo_sub['tract'],
+                        "z": s,
+                        "featureidkey": "properties.tract",
+                        "hovertext": df_geo_sub['Census_name'],
+                        "autocolorscale":False,
+                        "colorscale":"YlOrRd",
+                        "colorbar":dict(
+                                        title = label,
+                                        orientation = 'h',
+                                        x= -0.15,
+                                        xanchor= "left",
+                                        y= 0,
+                                        yanchor= "bottom",
+                                        showticklabels=True,
+                                        thickness= 20,
+                                        tickformatstops=dict(dtickrange=[0,10]),
+                                        titleside= 'top',
+                                        ticks= 'outside'
+                                       ),
+                        "zmin": s.min(),
+                        "zmax": s.max(),
+                        "marker_line_width": 0,
+                        "opacity": 0.2,
+                        "labels": label,
+                        "title": "Choropleth - Census Tract Level"
+
+                     }
+        )
+
+    # Location data layer
+    if loc_dropdown:
+
+        if 'mapbox.center' in mapdata and 'mapbox.zoom' in mapdata:
+
+            # set coords
+            coords[0] = mapdata['mapbox.center']['lat']
+            coords[1] = mapdata['mapbox.center']['lon']
+
+            # set zoom level
+            zoom = mapdata['mapbox.zoom']
 
 
+        g = geocoder.mapbox(coords, key=token, method='reverse')
+        geojson = g.json
+        addr = geojson["address"]
+
+        if loc_dropdown == "Transit":
+            df_nearby = nearby_places(addr, loc_dropdown)
+
+        elif loc_dropdown == "Grocery":
+            df_nearby = nearby_places(addr, loc_dropdown)
+
+        elif loc_dropdown == "School":
+            df_nearby = nearby_places(addr, loc_dropdown)
+
+        elif loc_dropdown == "Hospital":
+            df_nearby = nearby_places(addr, loc_dropdown)
+
+        elif loc_dropdown == "Food/Cafe":
+            df_nearby = nearby_places(addr, loc_dropdown)
+
+        elif loc_dropdown == "Worship":
+            df_nearby = nearby_places(addr, loc_dropdown)
+
+        elif loc_dropdown == "Gas":
+            df_nearby = nearby_places(addr, loc_dropdown)
+
+        # Check if DataFrame was returned
+        if isinstance(df_nearby, pd.DataFrame):
+
+           # Create a list of symbols by dict lookup
+           sym_list = []
+
+           for i in df_nearby['type_label']:
+               typ = sym_dict.get(i)
+               sym_list.append(typ)
 
 
+           datad.append({
+
+                          "type": "scattermapbox",
+                          "lat": df_nearby["Lat"],
+                          "lon": df_nearby["Lng"],
+                          "name": "POI",
+                          "hovertext": df_nearby['name'],
+                          "showlegend": False,
+                          "hoverinfo": "text",
+                          "mode": "markers",
+                          "clickmode": "event+select",
+                          "marker": {
+                                     "symbol": sym_list,
+                                     "size": 15,
+                                     "opacity": 0.7,
+                                     "color": "blue"
+                                    }
+                          }
+           )
 
 
-        layout = {
+    layout = {
 
-                     "autosize": True,
-                     "hovermode": "closest",
-                     "mapbox": {
+                 "autosize": True,
+                 "datarevision": 0,
+                 "hovermode": "closest",
+                 "mapbox": {
 
-                         "accesstoken": MAPBOX_KEY,
-                         "bearing": 0,
-                         "center": {
-                             "lat": layout_lat,
-                             "lon": layout_lon
-                         },
-                         "pitch": 0,
-                         "zoom": zoom,
-                         "style": "streets",
-
+                     "accesstoken": MAPBOX_KEY,
+                     "bearing": 0,
+                     "center": {
+                         "lat": coords[0],
+                         "lon": coords[1]
                      },
+                     "pitch": 0,
+                     "opacity": 0.2,
+                     "zoom": zoom,
+                     "style": "streets",
 
-                     "margin": {
-                        "r": 0,
-                        "t": 0,
-                        "l": 0,
-                        "b": 0,
-                        "pad": 0
-                    }
+                 },
 
-        }
+                 "margin": {
+                    "r": 0,
+                    "t": 0,
+                    "l": 0,
+                    "b": 0,
+                    "pad": 0
+                }
 
-        return ({"data": datad, "layout": layout}, df.to_dict("records"))
+    }
 
+    # Rearrange so that scattermapbox is top layer
+    if datad[0]['type'] == 'scattermapbox':
+        datad.append(datad.pop(datad.index(datad[0])))
+
+    if demo_dropdown or loc_dropdown:
+        return ({"data": datad, "layout": layout}, no_update)
+
+    elif show_properties_nclicks > 0:
+        return ({"data": datad, "layout": layout}, df1.to_dict("records"))
+
+    elif proptype == "Multi-Family" and market and show_properties_nclicks <= 0:
+        return ({"data": datad, "layout": layout}, no_update)
 
 
 
@@ -511,9 +748,10 @@ def update_map_deal(market, proptype, year_built_min, year_built_max, num_units_
                                Output("Size_deal","children"),
                                Output("Yr_Built_deal","children"),
                                Output("Property_deal","children"),
+                               Output("Rent_deal","children"),
                                Output("Revenue_deal","children"),
-                               Output("Monthly_Revenue_deal","children"),
-                               Output("Rent_Sqft_deal","children"),
+                               #Output("Monthly_Revenue_deal","children"),
+                               #Output("Rent_Sqft_deal","children"),
                                Output("occ-modal_deal","children"),
                                Output("rent-area-modal_deal","children"),
                                Output("assessed-value_deal","children"),
@@ -545,13 +783,12 @@ def display_popup(clickData, n_clicks, is_open):
         Size = clickData["points"][0]["customdata"][2]
         Built = clickData["points"][0]["customdata"][3]
         Property = clickData["points"][0]["customdata"][4]
-        Revenue = clickData["points"][0]['customdata'][5]
-        Monthly_Revenue = clickData["points"][0]["customdata"][6]
-        Revenue_Sqft = clickData["points"][0]["customdata"][7]
-        Occupancy = clickData["points"][0]["customdata"][8]
-        RentArea = clickData["points"][0]["customdata"][9]
-        AssessedValue = clickData["points"][0]["customdata"][10]
-        lastSaleDate = clickData["points"][0]["customdata"][11]
+        Rent = clickData["points"][0]["customdata"][5]
+        Revenue = clickData["points"][0]['customdata'][6]
+        Occupancy = clickData["points"][0]["customdata"][7]
+        RentArea = clickData["points"][0]["customdata"][8]
+        AssessedValue = clickData["points"][0]["customdata"][9]
+        lastSaleDate = clickData["points"][0]["customdata"][10]
 
         # Formatting
         Occupancy = float(Occupancy.strip('%'))
@@ -621,21 +858,27 @@ def display_popup(clickData, n_clicks, is_open):
             print(e)
 
         # formatted Rent for default view (NA) and calculated / post button click and handling of None values
+        if Rent is None:
+            Rent_fmt == "N/A"
+        else:
+            Rent = clean_currency(Rent)
+            Rent_fmt = "${:,.0f}".format(float(Rent))
+
         if Revenue is None:
             Revenue_fmt == "N/A"
         else:
             Revenue = clean_currency(Revenue)
             Revenue_fmt = "${:,.0f}".format(float(Revenue))
 
-        if Revenue_Sqft is None:
-            Revenue_Sqft_fmt == "N/A"
-        else:
-            Revenue_Sqft_fmt = "${:,.1f} Sq.ft".format(Revenue_Sqft)
-
-        if Monthly_Revenue is None:
-            Monthly_Revenue_fmt == "N/A"
-        else:
-            Monthly_Revenue_fmt = "${:,.0f}".format(Monthly_Revenue)
+        # if Revenue_Sqft is None:
+        #     Revenue_Sqft_fmt == "N/A"
+        # else:
+        #     Revenue_Sqft_fmt = "${:,.1f} Sq.ft".format(Revenue_Sqft)
+        #
+        # if Monthly_Revenue is None:
+        #     Monthly_Revenue_fmt == "N/A"
+        # else:
+        #     Monthly_Revenue_fmt = "${:,.0f}".format(Monthly_Revenue)
 
         if Occupancy is None:
             Occupancy_fmt == "N/A"
@@ -659,7 +902,7 @@ def display_popup(clickData, n_clicks, is_open):
         else:
             lastSaleDate_fmt = lastSaleDate
 
-        return(not is_open, carousel, Name, Address, Size, Built, Property, Revenue_fmt, Monthly_Revenue_fmt, Revenue_Sqft_fmt, Occupancy_fmt, RentArea_fmt, AssessedValue_fmt, lastSaleDate_fmt)
+        return(not is_open, carousel, Name, Address, Size, Built, Property, Rent_fmt, Revenue_fmt, Occupancy_fmt, RentArea_fmt, AssessedValue_fmt, lastSaleDate_fmt)
 
     elif n_clicks:
 
