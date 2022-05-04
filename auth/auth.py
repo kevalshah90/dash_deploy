@@ -1,10 +1,10 @@
 from flask import Blueprint, render_template, redirect, url_for,request,flash
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
-from flask_login import login_user, logout_user, login_required,current_user
-from .models import User,PassRecovery,EmailVerification
+from flask_login import login_user, logout_user, login_required, current_user
+from .models import users, pass_recovery, email_verification, login_history
 from . import db
-from .sendEmail import sendMail,sendMailForVerification
+from .sendEmail import sendMail, sendMailForVerification
 auth = Blueprint('auth', __name__)
 
 @auth.route('/login')
@@ -20,7 +20,7 @@ def login_post():
     password = request.form.get('password')
     remember = True if request.form.get('remember') else False
 
-    user = User.query.filter_by(email=email).first()
+    user = users.query.filter_by(email=email).first()
 
     # check if the user actually exists
     # take the user-supplied password, hash it, and compare it to the hashed password in the database
@@ -30,6 +30,12 @@ def login_post():
 
     # if the above check passes, then we know the user has the right credentials
     login_user(user, remember=remember)
+
+    # Add record to login_history table
+    user = users.query.filter_by(email=email).first()
+    history = login_history(id=user.id, login_datetime=datetime.now())
+    db.session.add(history)
+    db.session.commit()
 
     return render_template('dashboard2.html')
     #return redirect(url_for('main.dashboard2'))
@@ -52,16 +58,21 @@ def signup_post():
         flash('Please accept terms and conditions')
         return redirect(url_for('auth.signup'))
 
-    user = User.query.filter_by(email=email).first() # if this returns a user, then the email already exists in database
+    user = users.query.filter_by(email=email).first() # if this returns a user, then the email already exists in database
 
     if user: # if a user is found, we want to redirect back to signup page so user can try again
         flash('Email address already exists. Please go to login page')
         return redirect(url_for('auth.signup'))
 
     # create a new user with the form data. Hash the password so the plaintext version isn't saved.
-    new_user = User(fullname=fullname,email=email, name=name, password=generate_password_hash(password, method='sha256'),jobtitle=jobtitle,country=country,emailverified=0)
-
-    print("new user", new_user)
+    new_user = users(fullname=fullname,
+                     email=email,
+                     name=name,
+                     password=generate_password_hash(password, method='sha256'),
+                     jobtitle=jobtitle,
+                     country=country,
+                     emailverified=0,
+                     created_at=datetime.now())
 
     # Add the new user to the database
     db.session.add(new_user)
@@ -108,8 +119,7 @@ def updatePassword_post():
         flash('Please enter all fields')
         return redirect(url_for('auth.updatePassword',token))
 
-
-    passrecovery = PassRecovery.query.filter_by(token=token).first()
+    passrecovery = pass_recovery.query.filter_by(token=token).first()
 
     if not passrecovery:
         flash('Invalid user')
@@ -126,7 +136,7 @@ def updatePassword_post():
         flash('Link expired, Please resend link again')
         return redirect(url_for('auth.resetPass'))
 
-    user = User.query.filter_by(email=passrecovery.email).first()
+    user = users.query.filter_by(email=passrecovery.email).first()
 
     if not user:
         flash('Invalid user')
@@ -144,7 +154,7 @@ def updatePassword_post():
 def verifyEmail(token):
     message = ''
     if token is not '':
-        verification = EmailVerification.query.filter_by(token=token).first()
+        verification = email_verification.query.filter_by(token=token).first()
         if not verification:
             message = 'Not verified. Please try again'
         else:
@@ -158,7 +168,7 @@ def verifyEmail(token):
                 db.session.commit()
                 message = 'Link expired, Please resend link again'
             else:
-                user = User.query.filter_by(email=verification.email).first()
+                user = users.query.filter_by(email=verification.email).first()
 
                 if not user:
                     message = 'User not found'

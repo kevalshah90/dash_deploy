@@ -16,7 +16,7 @@ from plotly.graph_objs import *
 import flask
 from application import application
 import os
-from tabs import comps, analysis, deals
+from tabs import comps, analysis, deals, returns
 from pages import home
 import traceback
 
@@ -28,10 +28,6 @@ application.layout = html.Div([
 
                         # header
                         html.Div([
-
-                            # html.H2("Stroom Product Suite ®", style={"float":"center",
-                            #                                          "margin-left":"40%",
-                            #                                          "margin-top":"30px"}),
 
                             html.Div(
 
@@ -52,7 +48,8 @@ application.layout = html.Div([
                                         [
                                             dbc.NavLink("Comps", href="/comps", active="partial"),
                                             dbc.NavLink("Market", href="/market", active="partial"),
-                                            dbc.NavLink("Deals", href="/deals", active="partial"),
+                                            dbc.NavLink("Returns (Beta)", href="/returns", active="partial"),
+                                            dbc.NavLink("Deals", href="/deals", active="partial")
 
                                         ],
                                         vertical=True,
@@ -106,6 +103,9 @@ def display_content(pathname):
 
     elif pathname == "/market":
         return analysis.layout
+
+    elif pathname == "/returns":
+        return returns.layout
 
     elif pathname == "/deals":
         return deals.layout

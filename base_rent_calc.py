@@ -62,8 +62,6 @@ con = engine.connect()
 # Read ML data
 df_lease = pd.read_csv(os.getcwd() + "/data/df_ml_v1_march.csv")
 
-df_raw = pd.read_csv(os.getcwd() + "/data/df_raw_v1_march.csv")
-
 # Drop column
 df_lease.drop(df_lease.filter(regex="Unname"), axis=1, inplace=True)
 
@@ -228,110 +226,142 @@ def calc_rent(prop_address, proptype, yr_built, space, units, ameneties, assval,
     Query to pull nearby comps - Default to 1 mile radius
     '''
 
-    # CMBS data
+    # Apply units / size filter - set lower and upper bounds
+    lower_bound = int(units) - 65*int(units)/100
+    upper_bound = int(units) + 65*int(units)/100
+
+    '''
+    CMBS data
+    '''
+
     # Run query within a while-loop to get the required # of rows
     df_raw = pd.DataFrame({})
     rows = df_raw.shape[0]
 
-    # search radius - miles to meters
-    radius = 1*1609
+    # Search radius - miles to meters
+    radius_cmbs = 1.5*1609
 
-    # Between 20 to 30 results in comps set
-    while rows <= 30:
+    # Expand radius 1x
+    for i in range(2):
 
-        # Run query
         query = '''
                 select * from stroom_main.df_raw_v1_march
                 where st_distance_sphere(Point({},{}), coords) <= {};
-                '''.format(Long, Lat, radius)
+                '''.format(Long, Lat, radius_cmbs)
 
         df_raw = pd.read_sql(query, con)
 
-        rows = df_raw.shape[0]
-
-        if rows >= 20:
-            break
+        # if no comps found, expand radius
+        if df_raw.shape[0] == 0:
+            radius_cmbs = radius_cmbs * 2
         else:
-            radius = radius * 2
+            break
 
+    if df_raw.shape[0] > 0:
 
-    # Non CMBS data
+        # Add additional cols
+        df_raw['Revenue_per_sqft_year'] = df_raw['Revenue_per_sqft_month'] * 12
+        df_raw['Revenue_per_sqft_year'] = df_raw['Revenue_per_sqft_year'].apply('${:,.1f}'.format)
+
+        # Monthly Revenue / Unit / Month
+        df_raw['EstRevenueMonthly'] = (df_raw['Preceding_Fiscal_Year_Revenue']/df_raw['Size'])/12
+
+        # Apply a function to calculate distance from the subject property to Lease Sample DataFrame
+        df_raw['Distance'] = df_raw.apply(lambda x: calc_distance(prop_loc, x['Lat'], x['Long']), axis=1)
+
+        # Apply distance filter (In miles)
+        df_raw_dist = df_raw[df_raw['Distance'] <= radius_cmbs/1609]
+
+        # Fill NAs
+        df_raw_dist.fillna(0, inplace=True)
+        df_raw_dist.replace('nan', 0, inplace=True)
+
+        # To numeric
+        df_raw_dist['Size'] = pd.to_numeric(df_raw_dist['Size'], errors="coerce")
+        df_raw_dist['Size'] = df_raw_dist['Size'].astype(int)
+
+        # Only apply size filter if there are > 10 comps
+        if df_raw_dist.shape[0] > 10:
+            dfr = df_raw_dist[(df_raw_dist['Size'] >= lower_bound) & (df_raw_dist['Size'] <= upper_bound)]
+        else:
+            dfr = df_raw_dist
+
+        dfr.sort_values(by='Size', ascending=False, inplace=True)
+
+    '''
+    Non-CMBS data
+    '''
 
     # Get the state to be passed into the query
-    if geocode_result[0]['address_components'][5]['types'][0] == 'administrative_area_level_1':
+    if geocode_result:
 
-        state = geocode_result[0]['address_components'][5]['short_name'].lower()
+        for d in geocode_result[0]['address_components']:
 
-        # Run query within a while-loop to get the required # of rows
-        df_comps = pd.DataFrame({})
-        rows = df_comps.shape[0]
+            for k, v in d.items():
 
-        # search radius - miles to meters
-        radius = 1*1609
+                if 'administrative_area_level_1' in d['types']:
 
-        # Between 20 to 30 results in comps set
-        while rows <= 30:
+                    if k == 'short_name':
 
-            # Run query
-            query = '''
+                        state = v.lower()
 
-                    SELECT ds.*, AVG(dzr.price) as avg_rent
-                    FROM stroom_main.df_zillow_{} ds
-                    JOIN stroom_main.df_zillow_rent dzr
-                        ON ds.id = dzr.id
-                    GROUP BY ds.id
-                    HAVING ds.geomatch = 'no match'
-                    AND st_distance_sphere(Point({},{}), ds.coords) <= {}
-                    AND avg_rent <= 10000;
+                        # Search radius - miles to meters
+                        radius_noncmbs = 1.5*1609
 
-                    '''.format(state, Long, Lat, radius)
+                        # Attempt to expand radius 3x
+                        for i in range(3):
 
-            df_comps = pd.read_sql(query, con)
+                            # Run query
+                            query = '''
 
-            rows = df_comps.shape[0]
+                                    SELECT ds.*, dzr.bed_rooms, AVG(dzr.price) as avg_rent
+                                    FROM stroom_main.df_zillow_{} ds
+                                    JOIN stroom_main.df_zillow_rent dzr
+                                        ON ds.id = dzr.id
+                                    GROUP BY ds.id, dzr.bed_rooms
+                                    HAVING ds.geomatch = 'no match'
+                                    AND st_distance_sphere(Point({},{}), ds.coords) <= {}
+                                    AND dzr.bed_rooms <= 4
+                                    AND avg_rent <= 10000;
 
-            if rows >= 20:
-                break
-            else:
-                radius = radius * 2
+                                    '''.format(state, Long, Lat, radius_noncmbs)
 
-    # Add additional cols
-    df_raw['Revenue_per_sqft_year'] = df_raw['Revenue_per_sqft_month'] * 12
-    df_raw['Revenue_per_sqft_year'] = df_raw['Revenue_per_sqft_year'].apply('${:,.1f}'.format)
+                            df_comps = pd.read_sql(query, con)
 
-    # Monthly Revenue / Unit / Month
-    df_raw['EstRevenueMonthly'] = (df_raw['Preceding_Fiscal_Year_Revenue']/df_raw['Size'])/12
+                            # If no comps result, expand radius
+                            if df_comps.shape[0] == 0:
+                                radius_noncmbs = radius_noncmbs * 2
+                            else:
+                                break
 
-    # Apply a function to calculate distance from the subject property to Lease Sample DataFrame
-    df_comps['Distance'] = df_comps.apply(lambda x: calc_distance(prop_loc, x['Lat'], x['Long']), axis=1)
-    df_raw['Distance'] = df_raw.apply(lambda x: calc_distance(prop_loc, x['Lat'], x['Long']), axis=1)
 
-    # Apply distance filter (In miles)
-    df_comps_dist = df_comps[df_comps['Distance'] <= radius/1609]
-    df_raw_dist = df_raw[df_raw['Distance'] <= radius/1609]
+    if df_comps.shape[0] > 0:
 
-    # Fill NAs
-    df_comps_dist.fillna(0, inplace=True)
-    df_raw_dist.fillna(0, inplace=True)
+        # Apply a function to calculate distance from the subject property to Lease Sample DataFrame
+        df_comps['Distance'] = df_comps.apply(lambda x: calc_distance(prop_loc, x['Lat'], x['Long']), axis=1)
 
-    df_comps_dist.replace('nan', 0, inplace=True)
-    df_raw_dist.replace('nan', 0, inplace=True)
+        # Apply distance filter (In miles)
+        df_comps_dist = df_comps[df_comps['Distance'] <= radius_noncmbs/1609]
 
-    # To numeric
-    df_comps_dist['unit_count'] = pd.to_numeric(df_comps_dist['unit_count'], errors="coerce")
-    df_comps_dist['unit_count'] = df_comps_dist['unit_count'].astype(int)
+        # Fill NAs
+        df_comps_dist.fillna(0, inplace=True)
+        df_comps_dist.replace('nan', 0, inplace=True)
 
-    df_raw_dist['Size'] = pd.to_numeric(df_raw_dist['Size'], errors="coerce")
-    df_raw_dist['Size'] = df_raw_dist['Size'].astype(int)
+        # To numeric
+        df_comps_dist['unit_count'] = pd.to_numeric(df_comps_dist['unit_count'], errors="coerce")
+        df_comps_dist['unit_count'] = df_comps_dist['unit_count'].astype(int)
 
-    # Apply units / size filter
-    lower_bound = int(units - (35*units)/100)
-    upper_bound = int(units + (35*units)/100)
+        # Only apply size filter if there are > 10 comps
+        if df_comps_dist.shape[0] > 10:
+            dfc = df_comps_dist[(df_comps_dist['unit_count'] >= lower_bound) & (df_comps_dist['unit_count'] <= upper_bound)]
+        else:
+            dfc = df_comps_dist
 
-    df_comps_size = df_comps_dist[(df_comps_dist['unit_count'] >= lower_bound) & (df_comps_dist['unit_count'] <= upper_bound)]
-    df_raw_size = df_raw_dist[(df_raw_dist['Size'] >= lower_bound) & (df_raw_dist['Size'] <= upper_bound)]
+        dfc.sort_values(by='unit_count', ascending=False, inplace=True)
 
-    df_raw_size.sort_values(by='Size', ascending=False)
-    df_comps_size.sort_values(by='unit_count', ascending=False)
+    if radius_noncmbs >= radius_cmbs:
+        radius = radius_noncmbs
+    else:
+        radius = radius_cmbs
 
-    return {'y_pred': res, 'df_cmbs': df_raw_size.head(20), 'df_noncmbs': df_comps_size.head(20), 'radius': radius}
+    return {'y_pred': res, 'df_cmbs': dfr.head(20), 'df_noncmbs': dfc.head(20), 'radius': radius}

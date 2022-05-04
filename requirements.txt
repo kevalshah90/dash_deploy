@@ -7,7 +7,7 @@ censusgeocode==0.5.1
 dash==2.0.0
 dash_bootstrap_components==0.13.0
 dash_daq==0.5.0
-Flask==1.1.2
+Flask==1.1.4
 Flask_Login==0.5.0
 Flask_SQLAlchemy==2.5.1
 geocoder==1.38.1
@@ -49,3 +49,5 @@ mysqlclient==2.1.0
 pymysql==1.0.2
 configparser==5.2.0
 usaddress==0.5.0
+markupsafe==2.0.1
+geojson==2.5.0

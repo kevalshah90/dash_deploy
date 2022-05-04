@@ -1,7 +1,7 @@
-from flask import Blueprint, render_template,url_for, redirect,request
+from flask import Blueprint, render_template, url_for, redirect, request
 from flask.helpers import flash
 from flask_login import login_required, current_user, logout_user
-from .models import User
+from .models import users
 from . import db
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -20,7 +20,7 @@ def index():
 @login_required
 def dashboard2():
     email = current_user.email
-    user = User.query.filter_by(email=email).first()
+    user = users.query.filter_by(email=email).first()
     user_obj = {'fullname':user.fullname, 'email':user.email,'name':user.name,'jobtitle':user.jobtitle,'country':user.country,'emailverified':user.emailverified}
     return render_template('dashboard2.html', user=user_obj)
 
@@ -29,7 +29,7 @@ def dashboard2():
 @login_required
 def profile():
     email = current_user.email
-    user = User.query.filter_by(email=email).first()
+    user = users.query.filter_by(email=email).first()
     user_obj = {'fullname':user.fullname, 'email':user.email,'name':user.name,'jobtitle':user.jobtitle,'country':user.country,'emailverified':user.emailverified}
     return render_template('profile.html', user=user_obj)
 
@@ -55,7 +55,7 @@ def changePass_post():
         return redirect(url_for('main.changePass'))
 
     email = current_user.email
-    user = User.query.filter_by(email=email).first()
+    user = users.query.filter_by(email=email).first()
 
     if not user or not check_password_hash(user.password, old):
         flash('Invalid password.')
@@ -79,7 +79,7 @@ def updateProfile():
 
     email = current_user.email
 
-    user = User.query.filter_by(email=email).first()
+    user =  users.query.filter_by(email=email).first()
     user.fullname = fullname
     user.name = name
     user.jobtitle = jobtitle

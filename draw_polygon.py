@@ -23,13 +23,16 @@ def poi_poly(
     include_radius_poly=False,
 ):
 
+    # Add radius buffer, + 1000 mts
+    radius = radius + 1200
+
     # generate a geopandas data frame of the POI
     gdfpoi = gpd.GeoDataFrame(
         geometry=[shapely.geometry.Point(poi["Long"], poi["Lat"])],
         crs="EPSG:4326",
     )
 
-    # extend point to radius defined (a polygon).  Use UTM so that distances work, then back to WSG84
+    # Extend point to radius defined (a polygon).  Use UTM so that distances work, then back to WSG84
     gdfpoi = (
         gdfpoi.to_crs(gdfpoi.estimate_utm_crs())
         .geometry.buffer(radius)

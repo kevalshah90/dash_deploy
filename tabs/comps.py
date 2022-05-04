@@ -20,6 +20,7 @@ import mapbox
 import geopandas as gpd
 import shapely.geometry
 from scipy import spatial
+from scipy import stats
 from dash.dash import no_update
 from dash.exceptions import PreventUpdate
 from base_rent_calc import calc_rent, walkscore
@@ -75,15 +76,38 @@ df = pd.read_sql(query, con)
 # App Layout for designing the page and adding elements
 layout = html.Div([
 
+   html.Div([
+
+       dbc.Alert(id = "comps-alerts-1",
+                 className = "comps-alerts-1",
+                 dismissable = True,
+                 duration = 5000,
+                 is_open = False,
+                 color="secondary"),
+
+    ], id = "comps-alerts-div-1"),
+
+    html.Div([
+
+        dbc.Alert(id = "comps-alerts-2",
+                  className = "comps-alerts-2",
+                  dismissable = True,
+                  duration = 5000,
+                  is_open = False,
+                  color="secondary"),
+
+     ], id = "comps-alerts-div-2"),
+
    dbc.Row(
        [
+
          dbc.Col(
 
             html.Div([
 
                 # Plot properties map
                 dcc.Graph(id="map-graph1",
-                          style={"display": "inline-block", "width": "52em", "float": "left", "height":"700px", "margin-left":"0%"}
+                          style={"display": "inline-block", "width": "52em", "float": "left", "height":"700px", "margin-top":"2%"}
                           ),
 
                 # Hidden div inside the app that stores the intermediate value
@@ -531,6 +555,7 @@ layout = html.Div([
                     columns=[{"id":"Property_Name","name":"Property_Name"},
                              {"id":"Zip_Code","name":"Zip_Code"},
                              {"id":"Type","name":"Type"},
+                             {"id":"bed_rooms","name":"# Beds"},
                              {"id":"avg_price","name":"Avg. Rent"},
                              {"id":"Preceding_Fiscal_Year_Revenue","name": "Revenue"},
                              {"id":"EstRentableArea","name": "Area (Sq.ft)"},
@@ -657,14 +682,21 @@ def resetInput(address):
                         Output("renovated", "value"),
                         Output("space-acq", "value"),
                         Output("units-acq", "value"),
-                        Output("api-store", "data")
+                        Output("ameneties", "value"),
+                        Output("api-store", "data"),
+                        Output("comps-alerts-div-1", "style"),
+                        Output("comps-alerts-1", "children"),
+                        Output("comps-alerts-1", "is_open")
 
                       ],
                       [
                         Input("address_dropdown", "value")
+                      ],
+                      [
+                        State("comps-alerts-1", "is_open")
                       ]
                      )
-def autopopulate_propdetails(address):
+def autopopulate_propdetails(address, is_open):
 
     details = None
 
@@ -679,7 +711,8 @@ def autopopulate_propdetails(address):
         geohashval = gh.encode(geojson['lat'], geojson['lng'], precision=5)
 
     else:
-        raise PreventUpdate
+        return(no_update, no_update, no_update, no_update, no_update, no_update, {"display": "none"}, no_update, not is_open)
+        #raise PreventUpdate
 
 
     if geojson:
@@ -697,7 +730,10 @@ def autopopulate_propdetails(address):
 
             details = df_mf[['Year_Built','Renovated','EstRentableArea','Size','Most_Recent_Physical_Occupancy','Operating_Expenses_at_Contribution','propertyTaxAmount','taxRate','Preceding_Fiscal_Year_Revenue','lastSaleDate']].iloc[0].to_list()
 
-            return (int(details[0]), details[1], int(details[2]), int(details[3]), {"attom_api": None, "geohash": geohashval, "propdetails": details})
+            # Get Ameneties
+            amn_lst = ["Luxurious", "Park", "Gym", "Laundry", "Pool", "Rent-control", "Bike", "Patio", "Concierge", "Heat"]
+
+            return (int(details[0]), details[1], int(details[2]), int(details[3]), amn_lst, {"attom_api": None, "geohash": geohashval, "propdetails": details}, {"display": "none"}, no_update, not is_open)
 
         else:
 
@@ -705,8 +741,17 @@ def autopopulate_propdetails(address):
             avdata = attom_api_avalue(addr)
             avdata = json.loads(avdata.decode("utf-8"))
 
-            if avdata:
+            if avdata['status']['msg'] == 'SuccessWithoutResult':
 
+                msg = "Address Not Found - Enter Manually"
+
+                if is_open == True:
+                    return ('', '', '', '', '', no_update, {"display": "inline"}, msg, is_open)
+                else:
+                    return ('', '', '', '', '', no_update, {"display": "inline"}, msg, not is_open)
+
+
+            if avdata['status']['msg'] == 'SuccessWithResult':
                 # Year Built
                 try:
                     built = avdata['property'][0]['summary']['yearbuilt']
@@ -741,10 +786,13 @@ def autopopulate_propdetails(address):
                     print(e)
                     pass
 
-            return (built, no_update, area, units, {"attom_api": avdata, "geohash": geohashval, "propdetails": details})
+                # Get Ameneties
+                amn_lst = ["Luxurious", "Park", "Gym", "Laundry", "Pool", "Rent-control", "Bike", "Patio", "Concierge", "Heat"]
+
+            return (built, no_update, area, units, amn_lst, {"attom_api": avdata, "geohash": geohashval, "propdetails": details}, {"display": "none"}, no_update, not is_open)
 
     else:
-        raise PreventUpdate
+        return('', '', '', '', '', '', {"display": "none"}, no_update, no_update)
 
 
 
@@ -755,7 +803,10 @@ def autopopulate_propdetails(address):
                           Output("price-value", "value"),
                           Output("dummy-div", "value"),
                           Output("result-store", "data"),
-                          Output("query-store", "data")
+                          Output("query-store", "data"),
+                          Output("comps-alerts-div-2", "style"),
+                          Output("comps-alerts-2", "children"),
+                          Output("comps-alerts-2", "is_open")
 
                       ],
                       [
@@ -771,10 +822,11 @@ def autopopulate_propdetails(address):
                       ],
                       [
                           State("comps-store", "data"),
-                          State("api-store", "data")
+                          State("api-store", "data"),
+                          State("comps-alerts-2", "is_open")
                       ]
              )
-def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_clicks, comps_store, api_store):
+def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_clicks, comps_store, api_store, is_open):
 
     '''
     Update this to adjust map layout.
@@ -857,305 +909,315 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
 
            df_mf = pd.read_sql(query, con)
 
+           if df_mf.shape[0] == 0 and address:
 
-           datap = []
+               msg = "Address outside of Coverage Area"
 
-           # Create geo-aggregated dicts for occupancy, opex, tax rate and tax amount
-           occ_geo = dict()
-           opex_geo = dict()
-           taxRate_geo = dict()
-           taxAmt_geo = dict()
-           estVal_geo = dict()
-           rent1Br_geo = dict()
+               if is_open == True:
+                   return (no_update, no_update, no_update, no_update, no_update, {"display": "inline"}, msg, is_open)
+               else:
+                   return (no_update, no_update, no_update, no_update, no_update, {"display": "inline"}, msg, not is_open)
 
-           for name, group in df_mf.groupby(['geohash']):
+           else:
+
+               datap = []
+
+               # Create geo-aggregated dicts for occupancy, opex, tax rate and tax amount
+               occ_geo = dict()
+               opex_geo = dict()
+               taxRate_geo = dict()
+               taxAmt_geo = dict()
+               estVal_geo = dict()
+               rent1Br_geo = dict()
+
+               for name, group in df_mf.groupby(['geohash']):
+
+                   # Occupancy
+                   group['Most_Recent_Physical_Occupancy'] = group['Most_Recent_Physical_Occupancy'].apply(clean_percent).astype('float')
+                   occ_geo[name] = group[group['Most_Recent_Physical_Occupancy'] > 0]['Most_Recent_Physical_Occupancy'].mean()
+                   # Dict to pandas dataframe
+                   occ_geo_df = pd.DataFrame(zip(occ_geo.keys(), occ_geo.values()), columns=['geohash', 'value'])
+
+                   # Opex
+                   group['Operating_Expenses_at_Contribution'] = group['Operating_Expenses_at_Contribution'].apply(clean_currency).astype('float')
+                   opex_geo[name] = group[group['Operating_Expenses_at_Contribution'] > 0]['Operating_Expenses_at_Contribution'].mean()
+                   # Dict to pandas dataframe
+                   opex_geo_df = pd.DataFrame(zip(opex_geo.keys(), opex_geo.values()), columns=['geohash', 'value'])
+
+                   # Tax Rate
+                   group['taxRate'] = group['taxRate'].apply(clean_percent).astype('float')
+                   taxRate_geo[name] = group[group['taxRate'] > 0]['taxRate'].mean()
+                   # Dict to pandas dataframe
+                   taxRate_geo_df = pd.DataFrame(zip(taxRate_geo.keys(), taxRate_geo.values()), columns=['geohash', 'value'])
+
+                   # Property Tax
+                   group['propertyTaxAmount'] = group['propertyTaxAmount'].apply(clean_currency).astype('float')
+                   taxAmt_geo[name] = group[group['propertyTaxAmount'] > 0]['propertyTaxAmount'].mean()
+                   # Dict to pandas dataframe
+                   taxAmt_geo_df = pd.DataFrame(zip(taxAmt_geo.keys(), taxAmt_geo.values()), columns=['geohash', 'value'])
+
+                   # Assessed Value
+                   group['EstValue'] = group['EstValue'].apply(clean_currency).astype('float')
+                   estVal_geo[name] = group[group['EstValue'] > 0]['EstValue'].mean()
+                   # Dict to pandas dataframe
+                   estVal_geo_df = pd.DataFrame(zip(estVal_geo.keys(), estVal_geo.values()), columns=['geohash', 'value'])
+
+                   # Avg. Rents
+                   group['Rent_1Br'] = group['Rent_1Br'].apply(clean_currency).astype('float')
+                   rent1Br_geo[name] = group[group['Rent_1Br'] > 0]['Rent_1Br'].mean()
+                   # Dict to pandas dataframe
+                   rent1Br_geo_df = pd.DataFrame(zip(rent1Br_geo.keys(), rent1Br_geo.values()), columns=['geohash', 'value'])
+
+
+               # Check if found in DB
+               geohashval = api_store['geohash']
+
+               if api_store['propdetails'] is not None:
+                   details =  api_store['propdetails']
+               else:
+                   details = None
 
                # Occupancy
-               group['Most_Recent_Physical_Occupancy'] = group['Most_Recent_Physical_Occupancy'].apply(clean_percent).astype('float')
-               occ_geo[name] = group[group['Most_Recent_Physical_Occupancy'] > 0]['Most_Recent_Physical_Occupancy'].mean()
-               # Dict to pandas dataframe
-               occ_geo_df = pd.DataFrame(zip(occ_geo.keys(), occ_geo.values()), columns=['geohash', 'value'])
+               if details and details[4] is not None and type(details[4]) is str:
+                   occupancy = clean_percent(details[4])
+                   occupancy = float(occupancy)
+               else:
+                   occupancy = prox_mean(occ_geo_df, geohashval)
+                   occupancy = float(occupancy)
 
-               # Opex
-               group['Operating_Expenses_at_Contribution'] = group['Operating_Expenses_at_Contribution'].apply(clean_currency).astype('float')
-               opex_geo[name] = group[group['Operating_Expenses_at_Contribution'] > 0]['Operating_Expenses_at_Contribution'].mean()
-               # Dict to pandas dataframe
-               opex_geo_df = pd.DataFrame(zip(opex_geo.keys(), opex_geo.values()), columns=['geohash', 'value'])
+               # Operating Expenses
+               if details and details[5] is not None:
+                   if type(details[5]) is str and '$' in details[5]:
+                       opex = clean_currency(details[5])
+                       opex = float(opex)
+                   else:
+                       opex = details[5]
+                       opex = float(opex)
+               else:
+                   opex = prox_mean(opex_geo_df, geohashval)
+                   opex = float(opex)
 
                # Tax Rate
-               group['taxRate'] = group['taxRate'].apply(clean_percent).astype('float')
-               taxRate_geo[name] = group[group['taxRate'] > 0]['taxRate'].mean()
-               # Dict to pandas dataframe
-               taxRate_geo_df = pd.DataFrame(zip(taxRate_geo.keys(), taxRate_geo.values()), columns=['geohash', 'value'])
-
-               # Property Tax
-               group['propertyTaxAmount'] = group['propertyTaxAmount'].apply(clean_currency).astype('float')
-               taxAmt_geo[name] = group[group['propertyTaxAmount'] > 0]['propertyTaxAmount'].mean()
-               # Dict to pandas dataframe
-               taxAmt_geo_df = pd.DataFrame(zip(taxAmt_geo.keys(), taxAmt_geo.values()), columns=['geohash', 'value'])
-
-               # Assessed Value
-               group['EstValue'] = group['EstValue'].apply(clean_currency).astype('float')
-               estVal_geo[name] = group[group['EstValue'] > 0]['EstValue'].mean()
-               # Dict to pandas dataframe
-               estVal_geo_df = pd.DataFrame(zip(estVal_geo.keys(), estVal_geo.values()), columns=['geohash', 'value'])
-
-               # Avg. Rents
-               group['Rent_1Br'] = group['Rent_1Br'].apply(clean_currency).astype('float')
-               rent1Br_geo[name] = group[group['Rent_1Br'] > 0]['Rent_1Br'].mean()
-               # Dict to pandas dataframe
-               rent1Br_geo_df = pd.DataFrame(zip(rent1Br_geo.keys(), rent1Br_geo.values()), columns=['geohash', 'value'])
-
-
-           # Check if found in DB
-           geohashval = api_store['geohash']
-
-           if api_store['propdetails'] is not None:
-               details =  api_store['propdetails']
-           else:
-               details = None
-
-           # Occupancy
-           if details and details[4] is not None and type(details[4]) is str:
-               occupancy = clean_percent(details[4])
-               occupancy = float(occupancy)
-           else:
-               occupancy = prox_mean(occ_geo_df, geohashval)
-               occupancy = float(occupancy)
-
-           # Operating Expenses
-           if details and details[5] is not None:
-               if type(details[5]) is str and '$' in details[5]:
-                   opex = clean_currency(details[5])
-                   opex = float(opex)
+               if details and details[7] is not None:
+                   taxRate = details[7]
+                   taxRate = float(taxRate)
                else:
-                   opex = details[5]
-                   opex = float(opex)
-           else:
-               opex = prox_mean(opex_geo_df, geohashval)
-               opex = float(opex)
+                   taxRate = prox_mean(taxRate_geo_df, geohashval)
+                   taxRate = float(taxRate)
 
-           # Tax Rate
-           if details and details[7] is not None:
-               taxRate = details[7]
-               taxRate = float(taxRate)
-           else:
-               taxRate = prox_mean(taxRate_geo_df, geohashval)
-               taxRate = float(taxRate)
+               # Last Sale Date
+               if details and details[9] is not None:
+                   lastSaleDate = details[9]
+               else:
+                   ten_today = datetime.today() + relativedelta(years=-10)
+                   lastSaleDate = ten_today.strftime('%Y-%m-%d')
 
-           # Last Sale Date
-           if details and details[9] is not None:
-               lastSaleDate = details[9]
-           else:
-               ten_today = datetime.today() + relativedelta(years=-10)
-               lastSaleDate = ten_today.strftime('%Y-%m-%d')
-
-           # Property Tax - check API call, if not found prox_mean
-           if api_store['attom_api'] is not None:
-               try:
-                   taxAmt = ['attom_api']['property'][0]['assessment']['tax']['taxamt']
-                   taxAmt = int(taxAmt)
-               except Exception as e:
+               # Property Tax - check API call, if not found prox_mean
+               if api_store['attom_api'] is not None:
+                   try:
+                       taxAmt = ['attom_api']['property'][0]['assessment']['tax']['taxamt']
+                       taxAmt = int(taxAmt)
+                   except Exception as e:
+                       taxAmt = prox_mean(taxAmt_geo_df, geohashval)
+                       taxAmt = int(taxAmt)
+               else:
                    taxAmt = prox_mean(taxAmt_geo_df, geohashval)
                    taxAmt = int(taxAmt)
-           else:
-               taxAmt = prox_mean(taxAmt_geo_df, geohashval)
-               taxAmt = int(taxAmt)
 
-           # Assessed Value - check API call, if not found prox_mean
-           if api_store['attom_api'] is not None:
-               try:
-                   assVal = d['attom_api']['property'][0]['assessment']['assessed']['assdttlvalue']
-                   assVal = int(assVal)
-               except Exception as e:
+               # Assessed Value - check API call, if not found prox_mean
+               if api_store['attom_api'] is not None:
+                   try:
+                       assVal = d['attom_api']['property'][0]['assessment']['assessed']['assdttlvalue']
+                       assVal = int(assVal)
+                   except Exception as e:
+                       assVal = prox_mean(estVal_geo_df, geohashval)
+                       assVal = int(assVal)
+               else:
                    assVal = prox_mean(estVal_geo_df, geohashval)
                    assVal = int(assVal)
-           else:
-               assVal = prox_mean(estVal_geo_df, geohashval)
-               assVal = int(assVal)
 
 
-           # Avg. Rents 1Br
-           rent_1Br = prox_mean(rent1Br_geo_df, geohashval)
+               # Avg. Rents 1Br
+               rent_1Br = prox_mean(rent1Br_geo_df, geohashval)
 
-           # Ameneties
-           ameneties_count = len(ameneties)
+               # Ameneties
+               ameneties_count = len(ameneties)
 
-           # Function call to obtain rents
-           result = calc_rent(address, proptype, built, space_acq, units_acq, ameneties_count, assVal, occupancy, opex, taxAmt, taxRate, rent_1Br, lastSaleDate, geohashval)
+               # Function call to obtain rents
+               result = calc_rent(address, proptype, built, space_acq, units_acq, ameneties_count, assVal, occupancy, opex, taxAmt, taxRate, rent_1Br, lastSaleDate, geohashval)
 
-           # Revenue / Sq.ft / Year
-           price = result["y_pred"] * 12
+               # Revenue / Sq.ft / Year
+               price = result["y_pred"] * 12
 
-           '''
-           Set of Comps - CMBS
-           '''
+               '''
+               Set of Comps - CMBS
+               '''
 
-           # Lease Comp set
-           df_cmbs = result["df_cmbs"]
+               # Lease Comp set
+               df_cmbs = result["df_cmbs"]
 
-           # Median Revenue / Sq.ft / Year
-           market_price = df_cmbs["Revenue_per_sqft_year"].apply(clean_currency).median()
+               # Median Revenue / Sq.ft / Year
+               market_price = df_cmbs["Revenue_per_sqft_year"].apply(clean_currency).median()
 
-           # Assign pandas series
-           propname = df_cmbs["Property_Name"]
+               # Assign pandas series
+               propname = df_cmbs["Property_Name"]
 
-           # Generate Address string
-           addr_cols = ["Address", "City", "State", "Zip_Code"]
+               # Generate Address string
+               addr_cols = ["Address", "City", "State", "Zip_Code"]
 
-           df_cmbs['Address_Comp'] = df_cmbs[addr_cols].apply(lambda row: ' '.join(row.values.astype(str)), axis=1)
+               df_cmbs['Address_Comp'] = df_cmbs[addr_cols].apply(lambda row: ' '.join(row.values.astype(str)), axis=1)
 
-           # Columns for customdata
-           cd_cols = ['Property_Name','Address_Comp','Size','Year_Built','avg_price','Preceding_Fiscal_Year_Revenue','Opex','Occ','EstRentableArea','EstValue','lastSaleDate','Distance']
+               # Columns for customdata
+               cd_cols = ['Property_Name','Address_Comp','Size','Year_Built','avg_price','Preceding_Fiscal_Year_Revenue','Opex','Occ','EstRentableArea','EstValue','lastSaleDate','Distance']
 
-           datap.append({
-
-                         "type": "scattermapbox",
-                         "lat": df_cmbs["Lat"],
-                         "lon": df_cmbs["Long"],
-                         "name": "Location",
-                         "hovertext": propname,
-                         "showlegend": False,
-                         "hoverinfo": "text",
-                         "mode": "markers",
-                         "clickmode": "event+select",
-                         "customdata": df_cmbs.loc[:,cd_cols].values,
-                         "marker": {
-                                    "symbol": "circle",
-                                    "size": 8,
-                                    "opacity": 0.7,
-                                    "color": "black"
-                                   }
-                         }
-           )
-
-
-           '''
-           Set of comps - Non CMBS
-           '''
-
-           df_noncmbs = result["df_noncmbs"]
-
-           propname = df_noncmbs["name"]
-
-           # Estimate Annual Revenue
-           df_noncmbs['unit_count'] = pd.to_numeric(df_noncmbs['unit_count'], errors='coerce')
-           df_noncmbs['EstRevenue'] = (df_noncmbs['unit_count'] * df_noncmbs['avg_rent'])*12
-
-           # Columns for customdata
-           cd_cols = ['imgSrc','name','address_comp','unit_count','year_built','avg_rent','EstRevenue','EstRentableArea','EstValue','building_amenities','Distance']
-
-           datap.append({
-
-                           "type": "scattermapbox",
-                           "lat": df_noncmbs['Lat'],
-                           "lon": df_noncmbs['Long'],
-                           "name": "Location",
-                           "hovertext": propname,
-                           "showlegend": False,
-                           "hoverinfo": "text",
-                           "mode": "markers",
-                           "clickmode": "event+select",
-                           "customdata": df_noncmbs.loc[:,cd_cols].values,
-                           "marker": {
-                               "symbol": "circle",
-                               "size": 8,
-                               "opacity": 0.8,
-                               "color": "#4275f5"
-                               }
-                        }
-           )
-
-           # Add POI data layer
-           df_nearby = nearby_places(address, None)
-
-           # Check if DataFrame was returned
-           if isinstance(df_nearby, pd.DataFrame):
-
-              # Create a list of symbols by dict lookup
-              sym_list = []
-
-              for i in df_nearby['type_label']:
-                  typ = sym_dict.get(i)
-                  sym_list.append(typ)
-
-              datap.append({
+               datap.append({
 
                              "type": "scattermapbox",
-                             "lat": df_nearby["Lat"],
-                             "lon": df_nearby["Lng"],
-                             "name": "POI",
-                             "hovertext": df_nearby['name'],
+                             "lat": df_cmbs["Lat"],
+                             "lon": df_cmbs["Long"],
+                             "name": "Location",
+                             "hovertext": propname,
                              "showlegend": False,
                              "hoverinfo": "text",
                              "mode": "markers",
                              "clickmode": "event+select",
+                             "customdata": df_cmbs.loc[:,cd_cols].values,
                              "marker": {
-                                        "symbol": sym_list,
-                                        "size": 15,
+                                        "symbol": "circle",
+                                        "size": 8,
                                         "opacity": 0.7,
-                                        "color": "blue"
+                                        "color": "black"
                                        }
                              }
-              )
+               )
 
 
-           Lat, Long = get_geocodes(address)
+               '''
+               Set of comps - Non CMBS
+               '''
 
-           layout_lat = Lat
-           layout_lon = Long
-           zoom = 12
+               df_noncmbs = result["df_noncmbs"]
 
-           # create ranges
-           noi = float(price) * int(space_acq)
+               propname = df_noncmbs["name"]
 
-           min = noi - (10*noi/100)
-           max = noi + (10*noi/100)
+               # Estimate Annual Revenue
+               df_noncmbs['unit_count'] = pd.to_numeric(df_noncmbs['unit_count'], errors='coerce')
+               df_noncmbs['EstRevenue'] = (df_noncmbs['unit_count'] * df_noncmbs['avg_rent'])*12
 
-           min_fmt = float(min)/1000000
-           max_fmt = float(max)/1000000
+               # Columns for customdata
+               cd_cols = ['imgSrc','name','address_comp','unit_count','year_built','avg_rent','EstRevenue','EstRentableArea','EstValue','building_amenities','Distance']
 
-           # custom data for subject property
-           cdata = np.asarray([address, units_acq, built, proptype, space_acq, min_fmt, max_fmt, assVal, taxAmt])
+               datap.append({
 
-           if min_fmt > -1 and min_fmt < 1 and max_fmt > -1 and max_fmt < 1:
-               min_fmt = min_fmt * 1000
-               max_fmt = max_fmt * 1000
-               txt = "Expected Revenue: ${:.0f}K-${:.0f}K or approx. ${:.0f}/SF Yr.".format(min_fmt, max_fmt, price)
+                               "type": "scattermapbox",
+                               "lat": df_noncmbs['Lat'],
+                               "lon": df_noncmbs['Long'],
+                               "name": "Location",
+                               "hovertext": propname,
+                               "showlegend": False,
+                               "hoverinfo": "text",
+                               "mode": "markers",
+                               "clickmode": "event+select",
+                               "customdata": df_noncmbs.loc[:,cd_cols].values,
+                               "marker": {
+                                   "symbol": "circle",
+                                   "size": 8,
+                                   "opacity": 0.8,
+                                   "color": "#4275f5"
+                                   }
+                            }
+               )
 
-           elif min_fmt > -1 and min_fmt < 1 and max_fmt > 1:
-               min_fmt = min_fmt * 1000
-               txt = "Expected Revenue: ${:.0f}K-${:.1f}M or approx. ${:.0f}/SF Yr.".format(min_fmt, max_fmt, price)
+               # Add POI data layer
+               df_nearby = nearby_places(address, None)
 
-           elif min_fmt > 1 and max_fmt > 1:
-               txt = "Expected Revenue: ${:.1f}M-${:.1f}M or approx. ${:.0f}/SF Yr.".format(min_fmt, max_fmt, price)
+               # Check if DataFrame was returned
+               if isinstance(df_nearby, pd.DataFrame):
 
-           else:
-               txt = "Expected Revenue: ${:.1f}M-${:.1f}M or approx. ${:.0f}/SF Yr.".format(min_fmt, max_fmt, price)
+                  # Create a list of symbols by dict lookup
+                  sym_list = []
 
-           # Property Location
-           datap.append({
-                         "type": "scattermapbox",
-                         "lat": [Lat],
-                         "lon": [Long],
-                         "hovertext": '${:.0f}'.format(price),
-                         "text": txt,
-                         "textfont": {"color": "rgb(0, 0, 0)",
-                                      "size": 18},
-                         "textposition": "top right",
-                         "showlegend": False,
-                         "hoverinfo": "text",
-                         "mode": "text+markers",
-                         # Once the API is live, subject property data will be passed here for modal popup w carousel
-                         "customdata": [cdata],
-                         "marker": {
-                             "symbol": sym_dict[proptype],
-                             "size": 28,
-                             "opacity": 0.7,
-                             "color": "rgb(128, 128, 128)"
+                  for i in df_nearby['type_label']:
+                      typ = sym_dict.get(i)
+                      sym_list.append(typ)
+
+                  datap.append({
+
+                                 "type": "scattermapbox",
+                                 "lat": df_nearby["Lat"],
+                                 "lon": df_nearby["Lng"],
+                                 "name": "POI",
+                                 "hovertext": df_nearby['name'],
+                                 "showlegend": False,
+                                 "hoverinfo": "text",
+                                 "mode": "markers",
+                                 "clickmode": "event+select",
+                                 "marker": {
+                                            "symbol": sym_list,
+                                            "size": 15,
+                                            "opacity": 0.7,
+                                            "color": "blue"
+                                           }
+                                 }
+                  )
+
+
+               Lat, Long = get_geocodes(address)
+
+               layout_lat = Lat
+               layout_lon = Long
+               zoom = 12
+
+               # create ranges
+               noi = float(price) * int(space_acq)
+
+               min = noi - (10*noi/100)
+               max = noi + (10*noi/100)
+
+               min_fmt = float(min)/1000000
+               max_fmt = float(max)/1000000
+
+               # custom data for subject property
+               cdata = np.asarray([address, units_acq, built, proptype, space_acq, min_fmt, max_fmt, assVal, taxAmt])
+
+               if min_fmt > -1 and min_fmt < 1 and max_fmt > -1 and max_fmt < 1:
+                   min_fmt = min_fmt * 1000
+                   max_fmt = max_fmt * 1000
+                   txt = "Expected Revenue: ${:.0f}K-${:.0f}K or approx. ${:.0f}/SF Yr.".format(min_fmt, max_fmt, price)
+
+               elif min_fmt > -1 and min_fmt < 1 and max_fmt > 1:
+                   min_fmt = min_fmt * 1000
+                   txt = "Expected Revenue: ${:.0f}K-${:.1f}M or approx. ${:.0f}/SF Yr.".format(min_fmt, max_fmt, price)
+
+               elif min_fmt > 1 and max_fmt > 1:
+                   txt = "Expected Revenue: ${:.1f}M-${:.1f}M or approx. ${:.0f}/SF Yr.".format(min_fmt, max_fmt, price)
+
+               else:
+                   txt = "Expected Revenue: ${:.1f}M-${:.1f}M or approx. ${:.0f}/SF Yr.".format(min_fmt, max_fmt, price)
+
+               # Property Location
+               datap.append({
+                             "type": "scattermapbox",
+                             "lat": [Lat],
+                             "lon": [Long],
+                             "hovertext": '${:.0f}'.format(price),
+                             "text": txt,
+                             "textfont": {"color": "rgb(0, 0, 0)",
+                                          "size": 18},
+                             "textposition": "top right",
+                             "showlegend": False,
+                             "hoverinfo": "text",
+                             "mode": "text+markers",
+                             # Once the API is live, subject property data will be passed here for modal popup w carousel
+                             "customdata": [cdata],
+                             "marker": {
+                                 "symbol": sym_dict[proptype],
+                                 "size": 28,
+                                 "opacity": 0.7,
+                                 "color": "rgb(128, 128, 128)"
+                                 }
                              }
-                         }
-            )
+                )
 
 
         layout = {
@@ -1213,21 +1275,21 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
 
         if n_clicks and result:
             # Sub columns for DataTable
-            df_cmbs_sub = df_cmbs[['Property_Name','Zip_Code','avg_price','Preceding_Fiscal_Year_Revenue','EstRentableArea','Most_Recent_Physical_Occupancy','Year_Built','Size','EstRevenueMonthly','Revenue_per_sqft_year','Opex','EstValue','Distance']]
+            df_cmbs_sub = df_cmbs[['Property_Name','Zip_Code','bed_rooms','avg_price','Preceding_Fiscal_Year_Revenue','EstRentableArea','Most_Recent_Physical_Occupancy','Year_Built','Size','EstRevenueMonthly','Revenue_per_sqft_year','Opex','EstValue','Distance']]
 
-            df_noncmbs_sub = df_noncmbs[['name','addressZipcode','avg_rent','EstRevenue','EstRentableArea','year_built','unit_count','EstValue','Distance']]
+            df_noncmbs_sub = df_noncmbs[['name','addressZipcode','bed_rooms','avg_rent','EstRevenue','EstRentableArea','year_built','unit_count','EstValue','Distance']]
 
             df_cmbs_img = df_cmbs[['Property_Name','Image_dicts']]
 
-            return ({"data": datap, "layout": layout}, {"predicted": price, "market_price": market_price}, listToDict(details), {"df_cmbs": df_cmbs_sub.to_dict('records'), "df_noncmbs": df_noncmbs_sub.to_dict('records')}, df_cmbs_img.to_dict('records'))
+            return ({"data": datap, "layout": layout}, {"predicted": price, "market_price": market_price}, listToDict(details), {"df_cmbs": df_cmbs_sub.to_dict('records'), "df_noncmbs": df_noncmbs_sub.to_dict('records')}, df_cmbs_img.to_dict('records'), {"display": "none"}, no_update, no_update)
         else:
             df_sub = df[['Property_Name','Image_dicts']]
 
-            return ({"data": datac, "layout": layout}, {"predicted": price, "market_price": market_price}, listToDict(details), no_update, df_sub.to_dict('records'))
+            return ({"data": datac, "layout": layout}, {"predicted": price, "market_price": market_price}, listToDict(details), no_update, df_sub.to_dict('records'), {"display": "none"}, no_update, no_update)
 
     else:
         #PreventUpdate
-        return (no_update, no_update, no_update, no_update)
+        return (no_update, no_update, no_update, no_update, no_update, {"display": "none"}, no_update, no_update)
 
 
 # Update upside card
@@ -1340,7 +1402,7 @@ def update_table(address, proptype, built, units_acq, space_acq, ameneties, n_cl
 
        df_cmbs['Type'] = 'CMBS'
 
-       df_cmbs_v1 = pd.DataFrame(df_cmbs, columns = ["Property_Name","Type","Year_Built","Size","Preceding_Fiscal_Year_Revenue",
+       df_cmbs_v1 = pd.DataFrame(df_cmbs, columns = ["Property_Name","Type","Year_Built","bed_rooms","Size","Preceding_Fiscal_Year_Revenue",
                                                      "Most_Recent_Physical_Occupancy", "SubMarket", "City", "MSA", "EstRevenueMonthly",
                                                      "Opex", "Address", "Zip_Code", "avg_price", "Revenue_per_sqft_year", "EstRentableArea",
                                                      "EstValue","Distance"])
@@ -1358,7 +1420,30 @@ def update_table(address, proptype, built, units_acq, space_acq, ameneties, n_cl
                                   'unit_count': 'Size'}, inplace=True)
 
        # Append
-       df = pd.concat([df_cmbs_v1, df_noncmbs])
+       df = pd.concat([df_cmbs_v1, df_noncmbs], ignore_index=True)
+
+       # Apply formatting
+       df['Most_Recent_Physical_Occupancy'] = df['Most_Recent_Physical_Occupancy'].apply(clean_percent).astype('float')
+       df.reset_index(inplace = True)
+
+       # Filter by 1 bedroom, if 1 bed doesn't exist get the first value.
+       df.groupby(['Property_Name','Zip_Code','Type','SubMarket','City','MSA','Address','bed_rooms']).agg({
+                                                                                                            'Year_Built': lambda x:stats.mode(x)[0][0], #mode
+                                                                                                            'Size': np.mean,
+                                                                                                            'Preceding_Fiscal_Year_Revenue': np.mean,
+                                                                                                            'Most_Recent_Physical_Occupancy': lambda x:stats.mode(x)[0][0],
+                                                                                                            'EstRevenueMonthly': np.mean,
+                                                                                                            'Opex': np.mean,
+                                                                                                            'avg_price': np.mean,
+                                                                                                            'Revenue_per_sqft_year': np.mean,
+                                                                                                            'EstRentableArea': np.mean,
+                                                                                                            'EstValue': np.mean,
+                                                                                                            'Distance': np.mean
+                                                                                                         }).reset_index()
+
+       # Drop duplicates
+       df.drop_duplicates(subset=['Property_Name'], keep='first', inplace=True)
+
 
        # Add Monthly Rent Column
        '''
@@ -1389,14 +1474,16 @@ def update_table(address, proptype, built, units_acq, space_acq, ameneties, n_cl
 
        df['Distance'] = df['Distance'].apply('{:,.1f}'.format)
 
-       df.replace(["$nan",""],'nan', inplace=True)
+       df.replace(["$nan",""], 'nan', inplace=True)
 
        df.fillna('nan', inplace=True)
+
+       print("cols for groupby", df.columns)
 
        comps_data = df.to_dict("rows")
 
        # Clean up columns to calculate stats
-       df['Most_Recent_Physical_Occupancy'] = df['Most_Recent_Physical_Occupancy'].apply(clean_percent).astype('float')
+       #df['Most_Recent_Physical_Occupancy'] = df['Most_Recent_Physical_Occupancy'].apply(clean_percent).astype('float')
 
        df1 = df
 
