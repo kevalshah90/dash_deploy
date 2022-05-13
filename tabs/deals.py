@@ -21,6 +21,7 @@ import mapbox
 import geocoder
 import geopandas as gpd
 import shapely.geometry
+from shapely import wkt
 from scipy import spatial
 from dash.dash import no_update
 from dash.exceptions import PreventUpdate
@@ -49,10 +50,6 @@ MAPBOX_KEY="pk.eyJ1Ijoia2V2YWxzaGFoIiwiYSI6ImNreXhpeGlhYjAyMm8yb3VxbmRreTJzbmoif
 token = MAPBOX_KEY
 Geocoder = mapbox.Geocoder(access_token=token)
 
-# Read data
-df_lease_mf = pd.read_csv(os.getcwd() + "/data/df_forecast_v1_march.csv")
-Market_List = list(df_lease_mf['MSA'].unique())
-
 # Read geo data with census geometries from AWS S3
 s3_client = boto3.client('s3',
                          aws_access_key_id='AKIA2MQCGH6RW7TE3UG2',
@@ -61,10 +58,12 @@ s3_client = boto3.client('s3',
 # Read census tract level geometries and geo data
 url = 'https://stroom-images.s3.us-west-1.amazonaws.com/uscensusgeo.geojson'
 
-with urlopen(url) as response:
-    geo_json = json.load(response)
-
 df_geo = gpd.read_file(url)
+
+# Polygon to strings
+df_geo['geometry'] = df_geo.geometry.apply(lambda x: wkt.dumps(x))
+
+Market_List = list(df_geo['MSA'].unique())
 
 # App Layout for designing the page and adding elements
 layout = html.Div([
@@ -273,8 +272,20 @@ layout = html.Div([
                                                 dbc.Label("Property:", id="Property_deal"),
                                                 html.Br(),
 
-                                                dbc.Label("Avg. Rent:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
-                                                dbc.Label("Rent:", id="Rent_deal"),
+                                                dbc.Label("Avg. Rent (Studio):", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
+                                                dbc.Label("Rent:", id="RentSD"),
+                                                html.Br(),
+
+                                                dbc.Label("Avg. Rent (1Br):", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
+                                                dbc.Label("Rent:", id="Rent1BrD"),
+                                                html.Br(),
+
+                                                dbc.Label("Avg. Rent (2Br):", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
+                                                dbc.Label("Rent:", id="Rent2BrD"),
+                                                html.Br(),
+
+                                                dbc.Label("Avg. Rent (3Br):", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
+                                                dbc.Label("Rent:", id="Rent3BrD"),
                                                 html.Br(),
 
                                                 dbc.Label("Fiscal Revenue:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
@@ -422,21 +433,26 @@ def update_map_deal(market, overlay, demo_dropdown, loc_dropdown, proptype, year
     # check for triggered inputs / states
     ctx = dash.callback_context
 
-    # Adjust map view - Set Defaults
-    lat, long = get_geocodes(market)
+    if market or ctx.triggered:
+        # Adjust map view - Set Defaults
+        lat, long = get_geocodes(market)
 
-    coords = coords_dict[market]
+        coords = coords_dict[market]
 
-    zoom = 10
+        zoom = 10
 
-    # Look up State and County info
-    result = cg.coordinates(x=long, y=lat)
+        # Look up State and County info
+        result = cg.coordinates(x=long, y=lat)
 
     datad = []
 
     if mapdata:
 
         if 'mapbox.center' in mapdata and 'mapbox.zoom' in mapdata:
+
+            print(mapdata)
+
+            coords = []
 
             # Set coords
             coords[0] = mapdata['mapbox.center']['lat']
@@ -448,7 +464,7 @@ def update_map_deal(market, overlay, demo_dropdown, loc_dropdown, proptype, year
     if proptype == "Multi-Family" and market and show_properties_nclicks > 0:
 
         # Plot sample properties - match with starting view of the map
-        df_msa = df_lease_mf[df_lease_mf['MSA'] == market]
+        df_msa = df_geo[df_geo['MSA'] == market]
 
         # Apply filters
         df_msa['Year Built'] = df_msa['Year Built'].astype(int)
@@ -476,34 +492,40 @@ def update_map_deal(market, overlay, demo_dropdown, loc_dropdown, proptype, year
         # Filter by potential upside
         df1 = df_msa[(df_msa['diff_potential'] >= 0) & (df_msa['diff_potential'] <= 80)]
 
+        # Columns for groupby
+        grpcols = ['Property Name','Address_Comp','Lat','Long','Size','Year Built','Property Type','Preceding Fiscal Year Revenue','diff_potential','Occ.','EstRentableArea','EstValue','lastSaleDate']
+
+        # Aggregate with rent dict
+        df2 = df1.groupby(grpcols)[['bed_rooms','avg_price']].apply(lambda x: x.to_dict('records')).reset_index(name='rents')
+
         # Hover Info
-        propname = df1['Property Name']
+        propname = df2['Property Name']
 
         # Columns for customdata
-        cd_cols = ['Property Name','Address_Comp','Size','Year Built','Property Type','avg_price','Preceding Fiscal Year Revenue','Occ.','EstRentableArea','EstValue','lastSaleDate']
+        cd_cols = ['Property Name','Address_Comp','Size','Year Built','Property Type','rents','Preceding Fiscal Year Revenue','Occ.','EstRentableArea','EstValue','lastSaleDate']
 
         datad.append({
 
                         "type": "scattermapbox",
-                        "lat": df1['Lat'],
-                        "lon": df1['Long'],
+                        "lat": df2['Lat'],
+                        "lon": df2['Long'],
                         "name": "Location",
                         "hovertext": propname,
                         "showlegend": False,
                         "hoverinfo": "text",
                         "mode": "markers",
                         "clickmode": "event+select",
-                        "customdata": df1.loc[:,cd_cols].values,
+                        "customdata": df2.loc[:,cd_cols].values,
                         "marker": {
                             "autocolorscale": False,
                             "showscale":True,
                             "symbol": "circle",
                             "size": 9,
                             "opacity": 0.8,
-                            "color": df1['diff_potential'],
+                            "color": df2['diff_potential'],
                             "colorscale": "Portland",
-                            "cmin":df1[df1['diff_potential'] > 0]['diff_potential'].min(),
-                            "cmax":df1['diff_potential'].max(),
+                            "cmin": df2[df2['diff_potential'] > 0]['diff_potential'].min(),
+                            "cmax": df2['diff_potential'].max(),
                             "colorbar":dict(
                                             title= 'Upside',
                                             orientation= 'v',
@@ -592,7 +614,7 @@ def update_map_deal(market, overlay, demo_dropdown, loc_dropdown, proptype, year
         datad.append({
 
                         "type": "choroplethmapbox",
-                        "geojson": geo_json,
+                        "geojson": df_geo.__geo_interface__,
                         "locations": df_geo_sub['tract'],
                         "z": s,
                         "featureidkey": "properties.tract",
@@ -748,10 +770,13 @@ def update_map_deal(market, overlay, demo_dropdown, loc_dropdown, proptype, year
                                Output("Size_deal","children"),
                                Output("Yr_Built_deal","children"),
                                Output("Property_deal","children"),
-                               Output("Rent_deal","children"),
+
+                               Output("RentSD", "children"),
+                               Output("Rent1BrD", "children"),
+                               Output("Rent2BrD", "children"),
+                               Output("Rent3BrD", "children"),
+
                                Output("Revenue_deal","children"),
-                               #Output("Monthly_Revenue_deal","children"),
-                               #Output("Rent_Sqft_deal","children"),
                                Output("occ-modal_deal","children"),
                                Output("rent-area-modal_deal","children"),
                                Output("assessed-value_deal","children"),
@@ -770,7 +795,7 @@ def update_map_deal(market, overlay, demo_dropdown, loc_dropdown, proptype, year
                                 State("modal-1-deal", "is_open")
                           ],
                     )
-def display_popup(clickData, n_clicks, is_open):
+def display_popup2(clickData, n_clicks, is_open):
 
     if clickData:
 
@@ -783,7 +808,60 @@ def display_popup(clickData, n_clicks, is_open):
         Size = clickData["points"][0]["customdata"][2]
         Built = clickData["points"][0]["customdata"][3]
         Property = clickData["points"][0]["customdata"][4]
-        Rent = clickData["points"][0]["customdata"][5]
+
+        '''
+        Parse rental data
+        '''
+
+        l0 = []
+        l1 = []
+        l2 = []
+        l3 = []
+
+        r0_fmt = None
+        r1_fmt = None
+        r2_fmt = None
+        r3_fmt = None
+
+        for i in clickData["points"][0]["customdata"][5]:
+
+            # Check Apt type and calc. Avg. rent
+            if i['bed_rooms'] == 0:
+                l0.append(i)
+
+                if len(l0) > 0:
+                    r0 = int(sum(p['avg_price'] for p in l0))/len(l0)
+                    r0_fmt = "${:,.0f}".format(r0)
+                else:
+                    r0_fmt = "N/A"
+
+            if i['bed_rooms'] == 1:
+                l1.append(i)
+
+                if len(l1) > 0:
+                    r1 = int(sum(p['avg_price'] for p in l1))/len(l1)
+                    r1_fmt = "${:,.0f}".format(r1)
+                else:
+                    r1_fmt = "N/A"
+
+            if i['bed_rooms'] == 2:
+                l2.append(i)
+
+                if len(l2) > 0:
+                    r2 = int(sum(p['avg_price'] for p in l2))/len(l2)
+                    r2_fmt = "${:,.0f}".format(r2)
+                else:
+                    r2_fmt = "N/A"
+
+            if i['bed_rooms'] == 3:
+                l3.append(i)
+
+                if len(l3) > 0:
+                    r3 = int(sum(p['avg_price'] for p in l3))/len(l3)
+                    r3_fmt = "${:,.0f}".format(r3)
+                else:
+                    r3_fmt = "N/A"
+
         Revenue = clickData["points"][0]['customdata'][6]
         Occupancy = clickData["points"][0]["customdata"][7]
         RentArea = clickData["points"][0]["customdata"][8]
@@ -795,7 +873,7 @@ def display_popup(clickData, n_clicks, is_open):
 
         # Construct a list of dictionaries
         # Filter Pandas DataFrame
-        df = df_lease_mf[df_lease_mf['Property Name'] == Name]
+        df = df_geo[df_geo['Property Name'] == Name]
 
         index = df.index[0]
         img_dict = df['Image_dicts'][index]
@@ -858,27 +936,12 @@ def display_popup(clickData, n_clicks, is_open):
             print(e)
 
         # formatted Rent for default view (NA) and calculated / post button click and handling of None values
-        if Rent is None:
-            Rent_fmt == "N/A"
-        else:
-            Rent = clean_currency(Rent)
-            Rent_fmt = "${:,.0f}".format(float(Rent))
 
         if Revenue is None:
             Revenue_fmt == "N/A"
         else:
             Revenue = clean_currency(Revenue)
             Revenue_fmt = "${:,.0f}".format(float(Revenue))
-
-        # if Revenue_Sqft is None:
-        #     Revenue_Sqft_fmt == "N/A"
-        # else:
-        #     Revenue_Sqft_fmt = "${:,.1f} Sq.ft".format(Revenue_Sqft)
-        #
-        # if Monthly_Revenue is None:
-        #     Monthly_Revenue_fmt == "N/A"
-        # else:
-        #     Monthly_Revenue_fmt = "${:,.0f}".format(Monthly_Revenue)
 
         if Occupancy is None:
             Occupancy_fmt == "N/A"
@@ -902,7 +965,7 @@ def display_popup(clickData, n_clicks, is_open):
         else:
             lastSaleDate_fmt = lastSaleDate
 
-        return(not is_open, carousel, Name, Address, Size, Built, Property, Rent_fmt, Revenue_fmt, Occupancy_fmt, RentArea_fmt, AssessedValue_fmt, lastSaleDate_fmt)
+        return(not is_open, carousel, Name, Address, Size, Built, Property, r0_fmt, r1_fmt, r2_fmt, r3_fmt, Revenue_fmt, Occupancy_fmt, RentArea_fmt, AssessedValue_fmt, lastSaleDate_fmt)
 
     elif n_clicks:
 

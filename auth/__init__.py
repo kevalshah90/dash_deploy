@@ -20,6 +20,9 @@ server_auth = Flask(__name__, instance_relative_config=False)
 server_auth.config['SECRET_KEY'] = 'GXvCqWhRoOuihe5'
 server_auth.config['SQLALCHEMY_DATABASE_URI'] = "mysql+pymysql://{}:{}@{}/{}".format(dbuser,pwd,host,database)
 
+# Update this for Production
+server_auth.config['TESTING'] = True
+
 # init SQLAlchemy so we can use it later in our models
 db = SQLAlchemy(server_auth)
 

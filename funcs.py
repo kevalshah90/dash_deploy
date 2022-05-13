@@ -392,7 +392,8 @@ metros = [
           'San Jose-Sunnyvale-Santa Clara, CA MSA',
           'San Francisco-Oakland-Fremont, CA MSA',
           'San Diego-Carlsbad-San Marcos, CA MSA',
-          'Phoenix-Mesa-Scottsdale, AZ MSA'
+          'Phoenix-Mesa-Scottsdale, AZ MSA',
+          'Tucson, AZ MSA'
          ]
 
 coords_list = [
@@ -400,7 +401,8 @@ coords_list = [
                 [37.3672, -121.9334],
                 [37.7749, -122.4194],
                 [32.7157, -117.1611],
-                [33.4484, -112.0740]
+                [33.4484, -112.0740],
+                [32.1558, -111.02389]
               ]
 
 for i in range(len(metros)):

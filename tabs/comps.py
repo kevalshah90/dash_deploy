@@ -81,7 +81,7 @@ layout = html.Div([
        dbc.Alert(id = "comps-alerts-1",
                  className = "comps-alerts-1",
                  dismissable = True,
-                 duration = 5000,
+                 duration = 7000,
                  is_open = False,
                  color="secondary"),
 
@@ -92,7 +92,7 @@ layout = html.Div([
         dbc.Alert(id = "comps-alerts-2",
                   className = "comps-alerts-2",
                   dismissable = True,
-                  duration = 5000,
+                  duration = 7000,
                   is_open = False,
                   color="secondary"),
 
@@ -235,8 +235,20 @@ layout = html.Div([
                                 dbc.Label("Year Built:", id="Yr_Built"),
                                 html.Br(),
 
-                                dbc.Label("Avg. Rent:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
-                                dbc.Label("Avg. Rent:", id="Rent_cmbs"),
+                                dbc.Label("Avg. Rent (Studio):", id="RentS_lbl", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
+                                dbc.Label("Rent:", id="RentS"),
+                                html.Br(),
+
+                                dbc.Label("Avg. Rent (1Br):", id="Rent1Br_lbl", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
+                                dbc.Label("Rent:", id="Rent1Br"),
+                                html.Br(),
+
+                                dbc.Label("Avg. Rent (2Br):", id="Rent2Br_lbl", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
+                                dbc.Label("Rent:", id="Rent2Br"),
+                                html.Br(),
+
+                                dbc.Label("Avg. Rent (3Br):", id="Rent3Br_lbl", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
+                                dbc.Label("Rent:", id="Rent3Br"),
                                 html.Br(),
 
                                 dbc.Label("Fiscal Revenue:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
@@ -312,8 +324,20 @@ layout = html.Div([
                                dbc.Label("Year Built:", id="Yr_Built_z"),
                                html.Br(),
 
-                               dbc.Label("Average Rent:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
-                               dbc.Label("Rent:", id="rent_z"),
+                               dbc.Label("Avg. Rent (Studio):", id="RentSZ_lbl", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
+                               dbc.Label("Rent:", id="RentSZ"),
+                               html.Br(),
+
+                               dbc.Label("Avg. Rent (1Br):", id="Rent1BrZ_lbl", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
+                               dbc.Label("Rent:", id="Rent1BrZ"),
+                               html.Br(),
+
+                               dbc.Label("Avg. Rent (2Br):", id="Rent2BrZ_lbl", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
+                               dbc.Label("Rent:", id="Rent2BrZ"),
+                               html.Br(),
+
+                               dbc.Label("Avg. Rent (3Br):", id="Rent3BrZ_lbl", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
+                               dbc.Label("Rent:", id="Rent3BrZ"),
                                html.Br(),
 
                                dbc.Label("Estimated Revenue:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
@@ -417,7 +441,7 @@ layout = html.Div([
                 dbc.InputGroup(
                     [
 
-                        dbc.InputGroupAddon("Address"),
+                        dbc.InputGroupAddon("Addres"),
 
                         dcc.Input(id="address_autocomplete",
                                   persistence=True,
@@ -552,16 +576,16 @@ layout = html.Div([
 
                     id="comps-table",
 
-                    columns=[{"id":"Property_Name","name":"Property_Name"},
-                             {"id":"Zip_Code","name":"Zip_Code"},
+                    columns=[{"id":"Property_Name","name":"Name"},
+                             {"id":"Zip_Code","name":"Zip"},
+                             {"id":"Year_Built","name": "Yr. Built"},
                              {"id":"Type","name":"Type"},
                              {"id":"bed_rooms","name":"# Beds"},
                              {"id":"avg_price","name":"Avg. Rent"},
                              {"id":"Preceding_Fiscal_Year_Revenue","name": "Revenue"},
                              {"id":"EstRentableArea","name": "Area (Sq.ft)"},
-                             {"id":"Most_Recent_Physical_Occupancy","name":"Occupancy"},
-                             {"id":"Year_Built","name": "Year Built"},
-                             {"id":"Size","name": "Number of Units"},
+                             {"id":"Most_Recent_Physical_Occupancy","name":"Occ."},
+                             {"id":"Size","name": "Units"},
                              {"id":"Opex", "name":"Opex (Monthly)"},
                              {'id':"EstValue", "name":"Assessed Value"},
                              {'id':"Distance", "name":"Distance (in miles)"}],
@@ -741,8 +765,62 @@ def autopopulate_propdetails(address, is_open):
             avdata = attom_api_avalue(addr)
             avdata = json.loads(avdata.decode("utf-8"))
 
-            if avdata['status']['msg'] == 'SuccessWithoutResult':
+            try:
 
+                if avdata['status']['msg'] == 'SuccessWithoutResult' or avdata['Response']['status']['msg'] == 'Unauthorized':
+
+                    print("Address Not Found")
+
+                    msg = "Address Not Found - Enter Manually"
+
+                    if is_open == True:
+                        return ('', '', '', '', '', no_update, {"display": "inline"}, msg, is_open)
+                    else:
+                        return ('', '', '', '', '', no_update, {"display": "inline"}, msg, not is_open)
+
+
+                if avdata['status']['msg'] == 'SuccessWithResult':
+                    # Year Built
+                    try:
+                        built = avdata['property'][0]['summary']['yearbuilt']
+                        built = int(built)
+                    except Exception as e:
+                        built = no_update
+                        print(e)
+                        pass
+
+                    # Area
+                    try:
+                        area = avdata['property'][0]['building']['size']['grosssize']
+                        area = int(area)
+                    except Exception as e:
+                        if e == "grosssize":
+                            try:
+                                area = avdata['property'][0]['lot']['lotsize2']
+                                area = int(area)
+                            except Exception as e:
+                                pass
+                        else:
+                            area = no_update
+                            print(e)
+                            pass
+
+                    # Units
+                    try:
+                        units = avdata['property'][0]['building']['summary']['unitsCount']
+                        units = int(units)
+                    except Exception as e:
+                        units = no_update
+                        print(e)
+                        pass
+
+                    # Get Ameneties
+                    amn_lst = ["Luxurious", "Park", "Gym", "Laundry", "Pool", "Rent-control", "Bike", "Patio", "Concierge", "Heat"]
+
+                return (built, no_update, area, units, amn_lst, {"attom_api": avdata, "geohash": geohashval, "propdetails": details}, {"display": "none"}, no_update, not is_open)
+
+            except Exception as e:
+                print("Exception", e)
                 msg = "Address Not Found - Enter Manually"
 
                 if is_open == True:
@@ -750,46 +828,6 @@ def autopopulate_propdetails(address, is_open):
                 else:
                     return ('', '', '', '', '', no_update, {"display": "inline"}, msg, not is_open)
 
-
-            if avdata['status']['msg'] == 'SuccessWithResult':
-                # Year Built
-                try:
-                    built = avdata['property'][0]['summary']['yearbuilt']
-                    built = int(built)
-                except Exception as e:
-                    built = no_update
-                    print(e)
-                    pass
-
-                # Area
-                try:
-                    area = avdata['property'][0]['building']['size']['grosssize']
-                    area = int(area)
-                except Exception as e:
-                    if e == "grosssize":
-                        try:
-                            area = avdata['property'][0]['lot']['lotsize2']
-                            area = int(area)
-                        except Exception as e:
-                            pass
-                    else:
-                        area = no_update
-                        print(e)
-                        pass
-
-                # Units
-                try:
-                    units = avdata['property'][0]['building']['summary']['unitsCount']
-                    units = int(units)
-                except Exception as e:
-                    units = no_update
-                    print(e)
-                    pass
-
-                # Get Ameneties
-                amn_lst = ["Luxurious", "Park", "Gym", "Laundry", "Pool", "Rent-control", "Bike", "Patio", "Concierge", "Heat"]
-
-            return (built, no_update, area, units, amn_lst, {"attom_api": avdata, "geohash": geohashval, "propdetails": details}, {"display": "none"}, no_update, not is_open)
 
     else:
         return('', '', '', '', '', '', {"display": "none"}, no_update, no_update)
@@ -859,23 +897,29 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
         df['EstRevenueMonthly'] = (df['Preceding_Fiscal_Year_Revenue']/df['Size'])/12
         df['Distance'] = "N/A"
 
-        propname = df["Property_Name"]
+        # Columns for groupby
+        grpcols = ['Property_Name','Address_Comp','Lat','Long','Size','Year_Built','Preceding_Fiscal_Year_Revenue','Opex','Occ','EstRentableArea','EstValue','lastSaleDate','Distance']
+
+        # Aggregate with rent dict
+        dff = df.groupby(grpcols)[['bed_rooms','avg_price','avg_size']].apply(lambda x: x.to_dict('records')).reset_index(name='rents')
 
         # Columns for customdata
-        cd_cols = ['Property_Name','Address_Comp','Size','Year_Built','avg_price','Preceding_Fiscal_Year_Revenue','Opex','Occ','EstRentableArea','EstValue','lastSaleDate','Distance']
+        cd_cols = ['Property_Name','Address_Comp','Size','Year_Built','rents','Preceding_Fiscal_Year_Revenue','Opex','Occ','EstRentableArea','EstValue','lastSaleDate','Distance']
+
+        propname = dff["Property_Name"]
 
         datac.append({
 
                         "type": "scattermapbox",
-                        "lat": df['Lat'],
-                        "lon": df['Long'],
+                        "lat": dff['Lat'],
+                        "lon": dff['Long'],
                         "name": "Location",
                         "hovertext": propname,
                         "showlegend": False,
                         "hoverinfo": "text",
                         "mode": "markers",
                         "clickmode": "event+select",
-                        "customdata": df.loc[:,cd_cols].values,
+                        "customdata": dff.loc[:,cd_cols].values, #subset .loc[row:col]
                         "below": "''",
                         "marker": {
                             "symbol": "circle",
@@ -970,6 +1014,8 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
 
 
                # Check if found in DB
+               print("api store", api_store)
+
                geohashval = api_store['geohash']
 
                if api_store['propdetails'] is not None:
@@ -1059,29 +1105,34 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
                # Median Revenue / Sq.ft / Year
                market_price = df_cmbs["Revenue_per_sqft_year"].apply(clean_currency).median()
 
-               # Assign pandas series
-               propname = df_cmbs["Property_Name"]
-
                # Generate Address string
                addr_cols = ["Address", "City", "State", "Zip_Code"]
 
                df_cmbs['Address_Comp'] = df_cmbs[addr_cols].apply(lambda row: ' '.join(row.values.astype(str)), axis=1)
 
+               # Columns for groupby
+               grpcols = ['Property_Name','Address_Comp','Lat','Long','Size','Year_Built','Preceding_Fiscal_Year_Revenue','Opex','Occ','EstRentableArea','EstValue','lastSaleDate','Distance']
+
+               # Aggregate with rent dict
+               dff_cmbs = df_cmbs.groupby(grpcols)[['bed_rooms','avg_price']].apply(lambda x: x.to_dict('records')).reset_index(name='rents')
+
                # Columns for customdata
-               cd_cols = ['Property_Name','Address_Comp','Size','Year_Built','avg_price','Preceding_Fiscal_Year_Revenue','Opex','Occ','EstRentableArea','EstValue','lastSaleDate','Distance']
+               cd_cols = ['Property_Name','Address_Comp','Size','Year_Built','rents','Preceding_Fiscal_Year_Revenue','Opex','Occ','EstRentableArea','EstValue','lastSaleDate','Distance']
+
+               propname = dff_cmbs["Property_Name"]
 
                datap.append({
 
                              "type": "scattermapbox",
-                             "lat": df_cmbs["Lat"],
-                             "lon": df_cmbs["Long"],
+                             "lat": dff_cmbs["Lat"],
+                             "lon": dff_cmbs["Long"],
                              "name": "Location",
                              "hovertext": propname,
                              "showlegend": False,
                              "hoverinfo": "text",
                              "mode": "markers",
                              "clickmode": "event+select",
-                             "customdata": df_cmbs.loc[:,cd_cols].values,
+                             "customdata": dff_cmbs.loc[:,cd_cols].values,
                              "marker": {
                                         "symbol": "circle",
                                         "size": 8,
@@ -1098,27 +1149,33 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
 
                df_noncmbs = result["df_noncmbs"]
 
-               propname = df_noncmbs["name"]
-
                # Estimate Annual Revenue
                df_noncmbs['unit_count'] = pd.to_numeric(df_noncmbs['unit_count'], errors='coerce')
                df_noncmbs['EstRevenue'] = (df_noncmbs['unit_count'] * df_noncmbs['avg_rent'])*12
 
+               # Columns for groupby
+               grpcols = ['imgSrc','name','address_comp','Lat','Long','unit_count','year_built','EstRevenue','EstRentableArea','EstValue','building_amenities','Distance']
+
+               # Aggregate with rent dict
+               dff_noncmbs = df_noncmbs.groupby(grpcols)[['bed_rooms','avg_rent']].apply(lambda x: x.to_dict('records')).reset_index(name='rents')
+
                # Columns for customdata
-               cd_cols = ['imgSrc','name','address_comp','unit_count','year_built','avg_rent','EstRevenue','EstRentableArea','EstValue','building_amenities','Distance']
+               cd_cols = ['imgSrc','name','address_comp','unit_count','year_built','rents','EstRevenue','EstRentableArea','EstValue','building_amenities','Distance']
+
+               propname = dff_noncmbs["name"]
 
                datap.append({
 
                                "type": "scattermapbox",
-                               "lat": df_noncmbs['Lat'],
-                               "lon": df_noncmbs['Long'],
+                               "lat": dff_noncmbs['Lat'],
+                               "lon": dff_noncmbs['Long'],
                                "name": "Location",
                                "hovertext": propname,
                                "showlegend": False,
                                "hoverinfo": "text",
                                "mode": "markers",
                                "clickmode": "event+select",
-                               "customdata": df_noncmbs.loc[:,cd_cols].values,
+                               "customdata": dff_noncmbs.loc[:,cd_cols].values,
                                "marker": {
                                    "symbol": "circle",
                                    "size": 8,
@@ -1178,7 +1235,7 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
                max_fmt = float(max)/1000000
 
                # custom data for subject property
-               cdata = np.asarray([address, units_acq, built, proptype, space_acq, min_fmt, max_fmt, assVal, taxAmt])
+               cdata = np.asarray([address, units_acq, built, space_acq, min_fmt, max_fmt, assVal, taxAmt])
 
                if min_fmt > -1 and min_fmt < 1 and max_fmt > -1 and max_fmt < 1:
                    min_fmt = min_fmt * 1000
@@ -1309,52 +1366,60 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
                       )
 def update_image(n_clicks, price_values, space, api_store):
 
-    if n_clicks and api_store['propdetails'] and space:
+    try:
 
-        # 10% upside
-        upside10 = (10 * float(api_store['propdetails'][8]))/float(api_store['propdetails'][8])
-        upside10 = float(api_store['propdetails'][8]) + upside10
+        print(api_store)
 
-        # Rents + Occupancy, add condition to check for occupancy below market level
-        if float(price_values['predicted'] * space) <= upside10:
+        if n_clicks and api_store['propdetails'] and space:
 
-            img_link = "https://stroom-images.s3.us-west-1.amazonaws.com/low_indicator.png"
+            # 10% upside
+            upside10 = (10 * float(api_store['propdetails'][8]))/float(api_store['propdetails'][8])
+            upside10 = float(api_store['propdetails'][8]) + upside10
+
+            # Rents + Occupancy, add condition to check for occupancy below market level
+            if float(price_values['predicted'] * space) <= upside10:
+
+                img_link = "https://stroom-images.s3.us-west-1.amazonaws.com/low_indicator.png"
+
+                card_img_src = img_link
+                card_header = "Low Income Growth and Upside Potential"
+                card_text = "Rental revenue is close to comparable market value."
+
+                return (card_img_src, card_header, card_text)
+
+            elif float(price_values['predicted'] * space) >= float(api_store['propdetails'][8]):
+
+                img_link = "https://stroom-images.s3.us-west-1.amazonaws.com/high_indicator.png"
+
+                card_img_src = img_link
+                card_header = "Income Growth and Upside Potential"
+                card_text = "Rental revenue is lower than comparable market value."
+
+                return (card_img_src, card_header, card_text)
+
+        elif n_clicks:
+
+            img_link = "https://stroom-images.s3.us-west-1.amazonaws.com/no-data.png"
 
             card_img_src = img_link
-            card_header = "Low Income Growth and Upside Potential"
-            card_text = "Rental revenue is close to comparable market value."
+            card_header = "Not enough data"
+            card_text = "Upload Proforma or upgrade to estimate Value-Add Potential"
 
             return (card_img_src, card_header, card_text)
 
-        elif float(price_values['predicted'] * space) >= float(api_store['propdetails'][8]):
+        else:
 
-            img_link = "https://stroom-images.s3.us-west-1.amazonaws.com/high_indicator.png"
+            img_link = ""
 
             card_img_src = img_link
-            card_header = "Income Growth and Upside Potential"
-            card_text = "Rental revenue is lower than comparable market value."
+            card_header = ""
+            card_text = ""
 
             return (card_img_src, card_header, card_text)
 
-    elif n_clicks:
-
-        img_link = "https://stroom-images.s3.us-west-1.amazonaws.com/no-data.png"
-
-        card_img_src = img_link
-        card_header = "Not enough data"
-        card_text = "Upload Proforma or upgrade to estimate Value-Add Potential"
-
-        return (card_img_src, card_header, card_text)
-
-    else:
-
-        img_link = ""
-
-        card_img_src = img_link
-        card_header = ""
-        card_text = ""
-
-        return (card_img_src, card_header, card_text)
+    except Exception as e:
+        print('Exception', e)
+        return(no_update, no_update, no_update)
 
 
 # Update DataTable and Local Level Stats
@@ -1424,7 +1489,14 @@ def update_table(address, proptype, built, units_acq, space_acq, ameneties, n_cl
 
        # Apply formatting
        df['Most_Recent_Physical_Occupancy'] = df['Most_Recent_Physical_Occupancy'].apply(clean_percent).astype('float')
+       df['EstRevenueMonthly'] = df['EstRevenueMonthly'].apply(clean_currency).astype('float')
+       df['Opex'] = df['Opex'].apply(clean_currency).astype('float')
+       df['Revenue_per_sqft_year'] = df['Revenue_per_sqft_year'].apply(clean_currency).astype('float')
+       df['EstValue'] = df['EstValue'].apply(clean_currency).astype('float')
+
        df.reset_index(inplace = True)
+
+       df.fillna(0, inplace = True)
 
        # Filter by 1 bedroom, if 1 bed doesn't exist get the first value.
        df.groupby(['Property_Name','Zip_Code','Type','SubMarket','City','MSA','Address','bed_rooms']).agg({
@@ -1442,7 +1514,7 @@ def update_table(address, proptype, built, units_acq, space_acq, ameneties, n_cl
                                                                                                          }).reset_index()
 
        # Drop duplicates
-       df.drop_duplicates(subset=['Property_Name'], keep='first', inplace=True)
+       #df.drop_duplicates(subset=['Property_Name'], keep='first', inplace=True)
 
 
        # Add Monthly Rent Column
@@ -1468,7 +1540,10 @@ def update_table(address, proptype, built, units_acq, space_acq, ameneties, n_cl
            df['avg_price'] = df['avg_price'].apply('${:,.0f}'.format)
 
        if df['EstValue'].isna().sum() != len(df['EstValue']):
-           df['EstValue'] = df['EstValue'].astype('string').replace('\.0', '', regex=True)
+           df['EstValue'] = df['EstValue'].apply('${:,.0f}'.format)
+
+       if df['Most_Recent_Physical_Occupancy'].isna().sum() != len(df['Most_Recent_Physical_Occupancy']):
+           df['Most_Recent_Physical_Occupancy'] = df['Most_Recent_Physical_Occupancy'].apply('{:,.0f}%'.format)
 
        df['Year_Built'] = df['Year_Built'].astype('string').replace('\.0', '', regex=True)
 
@@ -1477,8 +1552,6 @@ def update_table(address, proptype, built, units_acq, space_acq, ameneties, n_cl
        df.replace(["$nan",""], 'nan', inplace=True)
 
        df.fillna('nan', inplace=True)
-
-       print("cols for groupby", df.columns)
 
        comps_data = df.to_dict("rows")
 
@@ -1507,6 +1580,7 @@ def update_table(address, proptype, built, units_acq, space_acq, ameneties, n_cl
 
        # Physical occupancy
        if df1['Most_Recent_Physical_Occupancy'].isna().sum() != len(df1['Most_Recent_Physical_Occupancy']):
+           df1['Most_Recent_Physical_Occupancy'] = df1['Most_Recent_Physical_Occupancy'].apply(clean_percent).astype(float)
            occ_col = df1[df1['Most_Recent_Physical_Occupancy'] > 0]
            occ_avg = occ_col['Most_Recent_Physical_Occupancy'].mean()
            occ_avg = "{:,.1f}%".format(occ_avg)
@@ -1540,7 +1614,12 @@ def update_table(address, proptype, built, units_acq, space_acq, ameneties, n_cl
                                Output("Address","children"),
                                Output("Size","children"),
                                Output("Yr_Built","children"),
-                               Output("Rent_cmbs", "children"),
+
+                               Output("RentS", "children"),
+                               Output("Rent1Br", "children"),
+                               Output("Rent2Br", "children"),
+                               Output("Rent3Br", "children"),
+
                                Output("Revenue","children"),
                                Output("Opex","children"),
                                Output("occ-modal","children"),
@@ -1567,7 +1646,12 @@ def update_table(address, proptype, built, units_acq, space_acq, ameneties, n_cl
                                Output("Address_z","children"),
                                Output("Size_z","children"),
                                Output("Yr_Built_z","children"),
-                               Output("rent_z","children"),
+
+                               Output("RentSZ", "children"),
+                               Output("Rent1BrZ", "children"),
+                               Output("Rent2BrZ", "children"),
+                               Output("Rent3BrZ", "children"),
+
                                Output("Revenue_z","children"),
                                Output("rent-area-modal-z","children"),
                                Output("assessed-value-z","children"),
@@ -1579,6 +1663,7 @@ def update_table(address, proptype, built, units_acq, space_acq, ameneties, n_cl
                           [
                                # Button clicks
                                Input("map-graph1","clickData"),
+                               Input("map-graph1", "selectedData"),
                                Input("comps-button", "n_clicks"),
                                Input("close","n_clicks"),
                                Input("close-s","n_clicks"),
@@ -1592,7 +1677,7 @@ def update_table(address, proptype, built, units_acq, space_acq, ameneties, n_cl
                                 State("query-store", "data")
                           ],
                     )
-def display_popup(clickData, n_clicks, n_clicks_c, n_clicks_sp, n_clicks_z, is_open_c, is_open_sp, is_open_z, query_store):
+def display_popup1(clickData, selectedData, n_clicks, n_clicks_c, n_clicks_sp, n_clicks_z, is_open_c, is_open_sp, is_open_z, query_store):
 
     if clickData:
 
@@ -1600,14 +1685,67 @@ def display_popup(clickData, n_clicks, n_clicks_c, n_clicks_sp, n_clicks_z, is_o
 
         print("clickData response", res)
 
-        # Condition for comps clickData
+        # Condition for CMBS clickData
         if len(clickData['points'][0]['customdata']) == 12:
 
             Name = clickData["points"][0]["customdata"][0]
             Address = clickData["points"][0]["customdata"][1]
             Size = clickData["points"][0]["customdata"][2]
             Built = clickData["points"][0]["customdata"][3]
-            Rent = clickData["points"][0]["customdata"][4]
+
+            '''
+            Parse rental data
+            '''
+
+            l0 = []
+            l1 = []
+            l2 = []
+            l3 = []
+
+            r0_fmt = None
+            r1_fmt = None
+            r2_fmt = None
+            r3_fmt = None
+
+            for i in clickData["points"][0]["customdata"][4]:
+
+                # Check Apt type and calc. Avg. rent
+                if i['bed_rooms'] == 0:
+                    l0.append(i)
+
+                    if len(l0) > 0:
+                        r0 = int(sum(p['avg_price'] for p in l0))/len(l0)
+                        r0_fmt = "${:,.0f}".format(r0)
+                    else:
+                        r0_fmt = "N/A"
+
+                if i['bed_rooms'] == 1:
+                    l1.append(i)
+
+                    if len(l1) > 0:
+                        r1 = int(sum(p['avg_price'] for p in l1))/len(l1)
+                        r1_fmt = "${:,.0f}".format(r1)
+                    else:
+                        r1_fmt = "N/A"
+
+                if i['bed_rooms'] == 2:
+                    l2.append(i)
+
+                    if len(l2) > 0:
+                        r2 = int(sum(p['avg_price'] for p in l2))/len(l2)
+                        r2_fmt = "${:,.0f}".format(r2)
+                    else:
+                        r2_fmt = "N/A"
+
+                if i['bed_rooms'] == 3:
+                    l3.append(i)
+
+                    if len(l3) > 0:
+                        r3 = int(sum(p['avg_price'] for p in l3))/len(l3)
+                        r3_fmt = "${:,.0f}".format(r3)
+                    else:
+                        r3_fmt = "N/A"
+
             Revenue = clickData["points"][0]['customdata'][5]
             Opex = clickData["points"][0]['customdata'][6]
             Occupancy = clickData["points"][0]["customdata"][7]
@@ -1684,13 +1822,6 @@ def display_popup(clickData, n_clicks, n_clicks_c, n_clicks_sp, n_clicks_z, is_o
                 except Exception as e:
                     print('Exception', e)
 
-            # Formatted Rent for default view (NA), calculated / post button click and handling of None values
-            if Rent in [None, 'nan']:
-                Rent_fmt == "N/A"
-            else:
-                Rent = int(Rent)
-                Rent_fmt = "${:,.0f}".format(Rent)
-
             if Revenue is None:
                 Revenue_fmt == "N/A"
             else:
@@ -1730,20 +1861,19 @@ def display_popup(clickData, n_clicks, n_clicks_c, n_clicks_sp, n_clicks_z, is_o
                 Distance = float(Distance)
                 Distance_fmt = "{:,.1f} miles".format(Distance)
 
-            return(not is_open_c, carousel, Name, Address, Size, Built, Rent_fmt, Revenue_fmt, Opex_fmt, Occupancy_fmt, RentArea_fmt, AssessedValue_fmt, lastSaleDate_fmt, Distance_fmt, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update)
+            return(not is_open_c, carousel, Name, Address, Size, Built, r0_fmt, r1_fmt, r2_fmt, r3_fmt, Revenue_fmt, Opex_fmt, Occupancy_fmt, RentArea_fmt, AssessedValue_fmt, lastSaleDate_fmt, Distance_fmt, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update)
 
         # subject property
-        elif len(clickData['points'][0]['customdata']) == 9:
+        elif len(clickData['points'][0]['customdata']) == 8:
 
             Address = clickData["points"][0]["customdata"][0]
             Size = clickData["points"][0]["customdata"][1]
             Built = clickData["points"][0]["customdata"][2]
-            Property = clickData["points"][0]["customdata"][3]
-            RentArea = clickData["points"][0]["customdata"][4]
-            ExpRevenueMin = clickData["points"][0]["customdata"][5]
-            ExpRevenueMax = clickData["points"][0]["customdata"][6]
-            AssessedVal = clickData["points"][0]["customdata"][7]
-            PropTax = clickData["points"][0]["customdata"][8]
+            RentArea = clickData["points"][0]["customdata"][3]
+            ExpRevenueMin = clickData["points"][0]["customdata"][4]
+            ExpRevenueMax = clickData["points"][0]["customdata"][5]
+            AssessedVal = clickData["points"][0]["customdata"][6]
+            PropTax = clickData["points"][0]["customdata"][7]
 
             # Get coordinates
             lat, long = get_geocodes(Address)
@@ -1797,7 +1927,6 @@ def display_popup(clickData, n_clicks, n_clicks_c, n_clicks_sp, n_clicks_z, is_o
                 else:
                     ExpRevenue_fmt = "${:.1f}M-${:.1f}M".format(ExpRevenueMin, ExpRevenueMax)
 
-
             if AssessedVal is None:
                 AssessedVal_fmt = "N/A"
             else:
@@ -1810,7 +1939,7 @@ def display_popup(clickData, n_clicks, n_clicks_c, n_clicks_sp, n_clicks_z, is_o
                 PropTax = int(PropTax)
                 PropTax_fmt = "${:,.0f}".format(PropTax)
 
-            return(no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, not is_open_sp, carousel, Address, Size, Built, Property, RentArea_fmt, ExpRevenue_fmt, AssessedVal_fmt, PropTax_fmt, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update)
+            return(no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, not is_open_sp, carousel, Address, Size, Built, RentArea_fmt, ExpRevenue_fmt, AssessedVal_fmt, PropTax_fmt, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update)
 
         elif n_clicks_sp:
             return is_open
@@ -1823,7 +1952,60 @@ def display_popup(clickData, n_clicks, n_clicks_c, n_clicks_sp, n_clicks_z, is_o
             Address = clickData["points"][0]["customdata"][2]
             Size = clickData["points"][0]["customdata"][3]
             Built = clickData["points"][0]["customdata"][4]
-            Rent = clickData["points"][0]["customdata"][5]
+
+            '''
+            Parse rental data
+            '''
+
+            l0 = []
+            l1 = []
+            l2 = []
+            l3 = []
+
+            r0_fmt = None
+            r1_fmt = None
+            r2_fmt = None
+            r3_fmt = None
+
+            for i in clickData["points"][0]["customdata"][5]:
+
+                # Check Apt type and calc. Avg. rent
+                if i['bed_rooms'] == 0:
+                    l0.append(i)
+
+                    if len(l0) > 0:
+                        r0 = int(sum(p['avg_rent'] for p in l0))/len(l0)
+                        r0_fmt = "${:,.0f}".format(r0)
+                    else:
+                        r0_fmt = "N/A"
+
+                if i['bed_rooms'] == 1:
+                    l1.append(i)
+
+                    if len(l1) > 0:
+                        r1 = int(sum(p['avg_rent'] for p in l1))/len(l1)
+                        r1_fmt = "${:,.0f}".format(r1)
+                    else:
+                        r1_fmt = "N/A"
+
+                if i['bed_rooms'] == 2:
+                    l2.append(i)
+
+                    if len(l2) > 0:
+                        r2 = int(sum(p['avg_rent'] for p in l2))/len(l2)
+                        r2_fmt = "${:,.0f}".format(r2)
+                    else:
+                        r2_fmt = "N/A"
+
+                if i['bed_rooms'] == 3:
+                    l3.append(i)
+
+                    if len(l3) > 0:
+                        r3 = int(sum(p['avg_rent'] for p in l3))/len(l3)
+                        r3_fmt = "${:,.0f}".format(r3)
+                    else:
+                        r3_fmt = "N/A"
+
             Revenue = clickData["points"][0]["customdata"][6]
             RentArea = clickData["points"][0]["customdata"][7]
             AssessedVal = clickData["points"][0]["customdata"][8]
@@ -1861,12 +2043,6 @@ def display_popup(clickData, n_clicks, n_clicks_c, n_clicks_sp, n_clicks_z, is_o
             else:
                 Built_fmt = int(float(Built))
 
-            if Rent in [None, 'nan']:
-                Rent_fmt = "Unknown"
-            else:
-                Rent = int(Rent)
-                Rent_fmt = "${:,.0f}".format(Rent)
-
             if Revenue in [None, 'nan']:
                 Revenue_fmt = "Unknown"
             else:
@@ -1898,7 +2074,7 @@ def display_popup(clickData, n_clicks, n_clicks_c, n_clicks_sp, n_clicks_z, is_o
                 Distance = float(Distance)
                 Distance_fmt = "{:,.1f} miles".format(Distance)
 
-            return(no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, not is_open_z, carousel, Name_fmt, Address_fmt, Size_fmt, Built_fmt, Rent_fmt, Revenue_fmt, RentArea_fmt, AssessedVal_fmt, Ameneties_fmt, Distance_fmt)
+            return(no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, not is_open_z, carousel, Name_fmt, Address_fmt, Size_fmt, Built_fmt, r0_fmt, r1_fmt, r2_fmt, r3_fmt, Revenue_fmt, RentArea_fmt, AssessedVal_fmt, Ameneties_fmt, Distance_fmt)
 
         elif n_clicks_z:
             return is_open
