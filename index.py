@@ -46,10 +46,10 @@ application.layout = html.Div([
                                     html.Hr(),
                                     dbc.Nav(
                                         [
+                                            dbc.NavLink("Deals", href="/deals", active="partial"),
                                             dbc.NavLink("Comps", href="/comps", active="partial"),
                                             dbc.NavLink("Market", href="/market", active="partial"),
-                                            dbc.NavLink("Returns (Beta)", href="/returns", active="partial"),
-                                            dbc.NavLink("Deals", href="/deals", active="partial")
+                                            dbc.NavLink("Returns (Beta)", href="/returns", active="partial")
 
                                         ],
                                         vertical=True,
@@ -98,7 +98,10 @@ def display_content(pathname):
 
     print(pathname)
 
-    if pathname in ["/","/dashboard/","/dashboard2","/comps"]:
+    if pathname in ["/","/dashboard/","/dashboard2"]:
+        return deals.layout
+
+    elif pathname == "/comps":
         return comps.layout
 
     elif pathname == "/market":

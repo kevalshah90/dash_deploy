@@ -2,6 +2,7 @@
 import geocoder
 import pandas as pd
 pd.options.display.float_format = '{:.8f}'.format
+import numpy as np
 import os
 import google_streetview.api
 import random
@@ -11,7 +12,7 @@ import geopandas as gpd
 import pygeohash as gh
 from geolib import geohash
 import pygeodesy as pgd
-
+from shapely.wkt import loads
 import http.client
 import urllib.parse
 
@@ -110,7 +111,6 @@ def get_geocodes(address):
         coords = [geojson['lat'], geojson['lng']]
 
         Lat = coords[0]
-
         Long = coords[1]
 
         return (Lat, Long)
@@ -122,7 +122,6 @@ def get_geocodes(address):
         result = gmaps.geocode(address)
 
         lat = result[0]['geometry']['location']['lat']
-
         lng = result[0]['geometry']['location']['lng']
 
         return (lat, lng)
@@ -315,6 +314,13 @@ def streetview(lat, long, identifier):
             print("Exception", e)
             pass
 
+# Check valid geometries
+def valid_geom(geom):
+    try:
+        return loads(geom)
+    except:
+        return np.nan
+
 
 # AWS Pre-signed URLs
 def create_presigned_url(bucket_name, object_name, expiration=3600):
@@ -355,7 +361,7 @@ def attom_api_avalue(address):
 
     headers = {
         'accept': "application/json",
-        'apikey': "970de09b9ba910304594a9a49e2342e1",
+        'apikey': "0365176532543d32d93508fcee28bf97",
         }
 
     addr = urllib.parse.quote(address)

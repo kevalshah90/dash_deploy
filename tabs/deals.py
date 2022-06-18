@@ -27,7 +27,7 @@ from dash.dash import no_update
 from dash.exceptions import PreventUpdate
 import io
 from urllib.request import urlopen
-from funcs import clean_percent, clean_currency, get_geocodes, create_presigned_url, streetview, coords_dict, nearby_places, sym_dict
+from funcs import clean_percent, clean_currency, get_geocodes, create_presigned_url, streetview, coords_dict, nearby_places, sym_dict, valid_geom
 
 # US Census libraries and API key
 import censusgeocode as cg
@@ -46,29 +46,55 @@ import googlemaps
 gmaps = googlemaps.Client(key="AIzaSyC0XCzdNwzI26ad9XXgwFRn2s7HrCWnCOk")
 
 # Mapbox
-MAPBOX_KEY="pk.eyJ1Ijoia2V2YWxzaGFoIiwiYSI6ImNreXhpeGlhYjAyMm8yb3VxbmRreTJzbmoifQ.ekuKTZVGZ08pnaOLOeMM1Q"
+MAPBOX_KEY="pk.eyJ1Ijoia2V2YWxzaGFoIiwiYSI6ImNqeDNsNzY2YTAwN3g0YW13aHMyNXIwMHAifQ.Hx8cPYyTFTSXP9ixiNcrTw"
 token = MAPBOX_KEY
 Geocoder = mapbox.Geocoder(access_token=token)
 
-# Read geo data with census geometries from AWS S3
-s3_client = boto3.client('s3',
-                         aws_access_key_id='AKIA2MQCGH6RW7TE3UG2',
-                         aws_secret_access_key='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')
+# mysql connection
+import pymysql
+from sqlalchemy import create_engine
+user = 'stroom'
+pwd = 'Stroomrds'
+host =  'aa1jp4wsh8skxvw.csl5a9cjrheo.us-west-1.rds.amazonaws.com'
+port = 3306
+database = 'stroom_main'
+engine = create_engine("mysql+pymysql://{}:{}@{}/{}".format(user,pwd,host,database))
+con = engine.connect()
+
+#Query GeoData
+try:
+    query = '''
+            select * from stroom_main.usgeodata_v1
+            '''
+
+    df_geo = pd.read_sql(query, con)
+
+    df_geo.tract_geom = df_geo.tract_geom.apply(valid_geom)
+
+    Market_List = list(df_geo['MSA'].unique())
+
+    # # Convert to GeoDataFrame
+    gdf = gpd.GeoDataFrame(df_geo[df_geo['tract_geom'].notna()], geometry='tract_geom')
+    # Polygon to strings
+    gdf['tract_geom'] = gdf.tract_geom.apply(lambda x: wkt.dumps(x))
+
+except:
+    print("usgeodata query exception", e)
+    df_geo = pd.DataFrame({})
+
 
 # Read census tract level geometries and geo data
-url = 'https://stroom-images.s3.us-west-1.amazonaws.com/uscensusgeo.geojson'
+url = 'https://stroom-images.s3.us-west-1.amazonaws.com/uscensusgeo_v1.geojson'
 
-df_geo = gpd.read_file(url)
-
-# Polygon to strings
-df_geo['geometry'] = df_geo.geometry.apply(lambda x: wkt.dumps(x))
-
-Market_List = list(df_geo['MSA'].unique())
+with urlopen(url) as response:
+    geo_json = json.load(response)
 
 # App Layout for designing the page and adding elements
 layout = html.Div([
 
                    dbc.Row([
+
+                        dbc.Label("Buy Box", className = "buy-box"),
 
                         dbc.InputGroup(
                             [
@@ -79,8 +105,7 @@ layout = html.Div([
                                                 id="market-deal",
                                                 persistence=True,
                                                 options=[{"label": name, "value": name} for name in Market_List],
-                                                placeholder="Market",
-                                                value="Los Angeles-Long Beach-Santa Ana, CA MSA"
+                                                placeholder="Select a Market"
                                ),
 
                             ],
@@ -168,7 +193,7 @@ layout = html.Div([
                            dbc.InputGroup(
                                [
 
-                                  dbc.Label("Layers"),
+                                  dbc.Label("Add Layers", className = "layers"),
                                   dcc.Checklist(
                                                 id = "overlay",
                                                 options=[{'label':'Overlay', 'value':'overlay'}]
@@ -181,10 +206,15 @@ layout = html.Div([
                                                  persistence=True,
                                                  persistence_type="memory",
                                                  options=[
+                                                          {'label': 'Rent Growth', 'value': 'RentGrowth'},
+                                                          {'label': 'Market Volatility', 'value': 'Volatility'},
                                                           {'label': 'Home Value', 'value': 'Home'},
                                                           {'label': 'Population', 'value': 'Pop'},
                                                           {'label': 'Income', 'value': 'Income'},
                                                           {'label': 'Price-Rent Ratio', 'value': 'Price_Rent_Ratio'},
+                                                          {'label': 'Income change (%)', 'value': 'Income-change'},
+                                                          {'label': 'Population change (%)', 'value': 'Pop-change'},
+                                                          {'label': 'Home Value change (%)', 'value': 'Home-value-change'},
                                                           {'label': 'Bachelor\'s', 'value': 'Bachelor'},
                                                           {'label': 'Graduate', 'value': 'Graduate'}
                                                  ],
@@ -228,9 +258,7 @@ layout = html.Div([
                             html.Div([
 
                                 # Plot properties map
-                                dcc.Graph(id="map-deal",
-                                          style={"display": "inline-block", "width": "566%", "float": "left", "height":"700px"}
-                                          ),
+                                dcc.Graph(id="map-deal"),
 
                                 ], className="deal-map-style"),
 
@@ -272,20 +300,8 @@ layout = html.Div([
                                                 dbc.Label("Property:", id="Property_deal"),
                                                 html.Br(),
 
-                                                dbc.Label("Avg. Rent (Studio):", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
-                                                dbc.Label("Rent:", id="RentSD"),
-                                                html.Br(),
-
-                                                dbc.Label("Avg. Rent (1Br):", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
-                                                dbc.Label("Rent:", id="Rent1BrD"),
-                                                html.Br(),
-
-                                                dbc.Label("Avg. Rent (2Br):", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
-                                                dbc.Label("Rent:", id="Rent2BrD"),
-                                                html.Br(),
-
-                                                dbc.Label("Avg. Rent (3Br):", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
-                                                dbc.Label("Rent:", id="Rent3BrD"),
+                                                dbc.Label("Est. Rent:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
+                                                dbc.Label("Rent:", id="Rent_deal"),
                                                 html.Br(),
 
                                                 dbc.Label("Fiscal Revenue:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
@@ -304,9 +320,33 @@ layout = html.Div([
                                                 dbc.Label("Assessed Value:", id="assessed-value_deal"),
                                                 html.Br(),
 
+                                                dbc.Label("In-place Cap Rate:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
+                                                dbc.Label("Cap Rate:", id="cap-rate_deal"),
+                                                html.Br(),
+
+                                                dbc.Label("Loan Info", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
+
+                                                dbc.Label("Loan Status:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
+                                                dbc.Label("Loan Status:", id="loan-status_deal"),
+                                                html.Br(),
+
+                                                dbc.Label("Deal Type:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
+                                                dbc.Label("Deal Type:", id="deal-type_deal"),
+                                                html.Br(),
+
+                                                dbc.Label("Loan Seller:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
+                                                dbc.Label("Loan Seller:", id="loan-seller_deal"),
+                                                html.Br(),
+
+                                                dbc.Label("Owner Info:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
+                                                dbc.Label("Owner Info:", id="owner-info_deal"),
+                                                html.Br(),
+
                                                 dbc.Label("Last Sale Date:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
                                                 dbc.Label("Last Sale Date:", id="sale-date_deal"),
                                                 html.Br(),
+
+                                                #dbc.Button("View Returns", color="primary", size="lg", id="returns_btn", className="mr-1")
 
                                             ]
                                         ),
@@ -327,6 +367,7 @@ layout = html.Div([
                         ], width={"size": 10, "order": "last", "offset": 8},),
                     ]),
 
+                    html.Div(id="dummy-div"),
 
                     dbc.Row([
 
@@ -340,13 +381,15 @@ layout = html.Div([
                                     columns=[{"id":"Property Name","name":"Property Name"},
                                              {"id":"Property Type","name":"Property Type"},
                                              {"id":"Zip Code","name":"Zip Code"},
+                                             {"id":"Year Built","name": "Year Built"},
                                              {"id":"Preceding Fiscal Year Revenue","name": "Revenue"},
                                              {"id":"EstRentableArea","name": "Area (Sq.ft)"},
                                              {"id":"Most Recent Physical Occupancy","name":"Occupancy"},
-                                             {"id":"Year Built","name": "Year Built"},
                                              {"id":"Size","name": "Number of Units"},
+                                             {"id":"zrent_median","name": "Rent (Median)"},
                                              {"id":"Opex", "name":"Opex (Monthly)"},
                                              {'id':"EstValue", "name":"Assessed Value"},
+                                             {'id':"Loan Status_y", "name":"Loan Status"},
                                              {'id':"lastSaleDate", "name":"Last Sale Date"}],
 
                                     style_cell={
@@ -405,6 +448,32 @@ layout = html.Div([
 
 
 # Callbacks
+
+# Auto Populate market
+@application.callback([
+                          Output("market-deal", "value")
+                      ],
+                      [
+                          Input("dummy-div", "value")
+                      ],
+                      [
+                          State("query-store", "data"),
+                          State("result-store", "data"),
+                          State("api-store", "data"),
+                          State("table-store", "data")
+                      ]
+                     )
+def autopop_market(dummy, query_store, result_store, api_store, table_store):
+
+    print("autopop market cb")
+
+    print("query store", query_store)
+    print("result store", result_store)
+    print("api store", api_store)
+    print("table store", table_store)
+
+    return (no_update)
+
 # Update map graph
 @application.callback([
 
@@ -433,26 +502,54 @@ def update_map_deal(market, overlay, demo_dropdown, loc_dropdown, proptype, year
     # check for triggered inputs / states
     ctx = dash.callback_context
 
-    if market or ctx.triggered:
-        # Adjust map view - Set Defaults
-        lat, long = get_geocodes(market)
+    coords = [0,0]
 
-        coords = coords_dict[market]
+    # Default layout
+    coords[0] = 37.7749
+    coords[1] = -122.4194
 
-        zoom = 10
-
-        # Look up State and County info
-        result = cg.coordinates(x=long, y=lat)
+    zoom = 10
 
     datad = []
+
+    data_def = []
+
+    data_def.append({
+
+                        "type": "scattermapbox",
+                        "lat": coords[0],
+                        "lon": coords[1],
+                        "name": "Location",
+                        "hovertext": "",
+                        "showlegend": False,
+                        "hoverinfo": "text",
+                        "mode": "markers",
+                        "clickmode": "event+select",
+                        "marker": {
+                            "symbol": "circle",
+                            "size": 9,
+                            "opacity": 0.8
+                        }
+                    }
+    )
+
+    if market is not None or ctx.triggered[0]['value'] is not None:
+
+        if market in Market_List:
+            lat, long = get_geocodes(market)
+            coords[0] = lat
+            coords[1] = long
+            zoom = 9
+
+        elif ctx.triggered[0]['value'] in Market_List:
+            lat, long = get_geocodes(market)
+            coords[0] = lat
+            coords[1] = long
+            zoom = 9
 
     if mapdata:
 
         if 'mapbox.center' in mapdata and 'mapbox.zoom' in mapdata:
-
-            print(mapdata)
-
-            coords = []
 
             # Set coords
             coords[0] = mapdata['mapbox.center']['lat']
@@ -464,7 +561,7 @@ def update_map_deal(market, overlay, demo_dropdown, loc_dropdown, proptype, year
     if proptype == "Multi-Family" and market and show_properties_nclicks > 0:
 
         # Plot sample properties - match with starting view of the map
-        df_msa = df_geo[df_geo['MSA'] == market]
+        df_msa = gdf[gdf['MSA'] == market]
 
         # Apply filters
         df_msa['Year Built'] = df_msa['Year Built'].astype(int)
@@ -481,51 +578,45 @@ def update_map_deal(market, overlay, demo_dropdown, loc_dropdown, proptype, year
         addr_cols = ["Address", "City", "State", "Zip Code"]
         df_msa['Address_Comp'] = df_msa[addr_cols].apply(lambda row: ' '.join(row.values.astype(str)), axis=1)
 
-        # Monthly Revenue / Unit / Month
-        df_msa['EstRevenueMonthly'] = (df_msa['Preceding Fiscal Year Revenue']/df_msa['Size'])/12
-
         # Format Columns
-        df_msa['EstValue'] = df_msa['EstValue'].apply('${:,.0f}'.format)
-        df_msa['Preceding Fiscal Year Revenue'] = df_msa['Preceding Fiscal Year Revenue'].apply('${:,.0f}'.format)
         df_msa['Occ.'] = df_msa['Occ.'].apply(clean_percent)
 
         # Filter by potential upside
         df1 = df_msa[(df_msa['diff_potential'] >= 0) & (df_msa['diff_potential'] <= 80)]
 
-        # Columns for groupby
-        grpcols = ['Property Name','Address_Comp','Lat','Long','Size','Year Built','Property Type','Preceding Fiscal Year Revenue','diff_potential','Occ.','EstRentableArea','EstValue','lastSaleDate']
-
-        # Aggregate with rent dict
-        df2 = df1.groupby(grpcols)[['bed_rooms','avg_price']].apply(lambda x: x.to_dict('records')).reset_index(name='rents')
+        # Format columns
+        df1['EstValue'] = df1['EstValue'].apply('${:,.0f}'.format)
+        df1['zrent_median'] = df1['zrent_median'].apply('${:,.0f}'.format)
+        df1['Preceding Fiscal Year Revenue'] = df1['Preceding Fiscal Year Revenue'].apply('${:,.0f}'.format)
 
         # Hover Info
-        propname = df2['Property Name']
+        propname = df1['Property Name']
 
         # Columns for customdata
-        cd_cols = ['Property Name','Address_Comp','Size','Year Built','Property Type','rents','Preceding Fiscal Year Revenue','Occ.','EstRentableArea','EstValue','lastSaleDate']
+        cd_cols = ['Property Name','Address_Comp','Size','Year Built','Property Type','zrent_quantile_random','zrent_median','Preceding Fiscal Year Revenue','Occ.','EstRentableArea','EstValue','CapRate','Loan Status_y','Deal Type','Loan Seller','PartyOwner1NameFull','lastSaleDate']
 
         datad.append({
 
                         "type": "scattermapbox",
-                        "lat": df2['Lat'],
-                        "lon": df2['Long'],
+                        "lat": df1['Lat'],
+                        "lon": df1['Long'],
                         "name": "Location",
                         "hovertext": propname,
                         "showlegend": False,
                         "hoverinfo": "text",
                         "mode": "markers",
                         "clickmode": "event+select",
-                        "customdata": df2.loc[:,cd_cols].values,
+                        "customdata": df1.loc[:,cd_cols].values,
                         "marker": {
                             "autocolorscale": False,
                             "showscale":True,
                             "symbol": "circle",
                             "size": 9,
                             "opacity": 0.8,
-                            "color": df2['diff_potential'],
-                            "colorscale": "Portland",
-                            "cmin": df2[df2['diff_potential'] > 0]['diff_potential'].min(),
-                            "cmax": df2['diff_potential'].max(),
+                            "color": df1['diff_potential'],
+                            "colorscale": "YlGnBu",
+                            "cmin": df1[df1['diff_potential'] > 0]['diff_potential'].min(),
+                            "cmax": df1['diff_potential'].max(),
                             "colorbar":dict(
                                             title= 'Upside',
                                             orientation= 'v',
@@ -540,9 +631,7 @@ def update_map_deal(market, overlay, demo_dropdown, loc_dropdown, proptype, year
                      }
         )
 
-
-
-    elif proptype == "Multi-Family" and market and show_properties_nclicks <= 0:
+    elif proptype == "Multi-Family" and market and show_properties_nclicks <= 0 and df_geo.shape[0] > 0:
 
         datad.append({
 
@@ -566,96 +655,218 @@ def update_map_deal(market, overlay, demo_dropdown, loc_dropdown, proptype, year
 
 
     # Choroplethmapbox
-    if demo_dropdown:
+    if demo_dropdown is not None and demo_dropdown != "" and gdf.shape[0] > 0:
 
-        if 'mapbox.center' in mapdata and 'mapbox.zoom' in mapdata:
+        geo_level = None
 
-            # set coords
-            coords[0] = mapdata['mapbox.center']['lat']
-            coords[1] = mapdata['mapbox.center']['lon']
+        df_geo_sub = gdf[gdf['MSA'] == market]
 
-            # set zoom level
-            zoom = mapdata['mapbox.zoom']
+        if mapdata is not None:
 
-        df_geo_sub = df_geo[df_geo['MSA'] == market]
+            if len(mapdata) > 1 and 'mapbox.center' in mapdata and 'mapbox.zoom' in mapdata:
+
+                # set coords
+                coords[0] = mapdata['mapbox.center']['lat']
+                coords[1] = mapdata['mapbox.center']['lon']
+
+                # set zoom level
+                zoom = mapdata['mapbox.zoom']
+
+        if demo_dropdown == "RentGrowth":
+            # Query rental growth data
+            query = '''
+
+                    select MsaName, zip_code, AVG(pct_change) AS avg_rent_growth, ST_AsText(geometry) as geom
+                    from stroom_main.gdf_rent_growth
+                    GROUP BY MsaName, zip_code, geometry
+                    HAVING st_distance_sphere(Point({},{}), ST_Centroid(geometry)) <= {};
+
+                    '''.format(coords[1], coords[0], 1609*25)
+
+            # To panads
+            df_rg = pd.read_sql(query, con)
+
+            # To GeoPandas
+            df_rg['geom'] = gpd.GeoSeries.from_wkt(df_rg['geom'])
+            gdf_rg = gpd.GeoDataFrame(df_rg, geometry='geom')
+
+            gdf_rg['avg_rent_growth'] = round(gdf_rg['avg_rent_growth']*100,2)
+            s = gdf_rg['avg_rent_growth'].astype(float)
+            label = "Rent Growth (YoY)"
+
+            geo_level = "zip"
+            cscale = "Portland"
+
+        # Volatility Index
+        if demo_dropdown == "Volatility":
+            # Query rental growth data
+            query = '''
+
+                    select MsaName, zip_code, STD(pct_change) AS std_rent_growth, ST_AsText(geometry) as geom
+                    from stroom_main.gdf_rent_growth
+                    GROUP BY MsaName, zip_code, geometry
+                    HAVING st_distance_sphere(Point({},{}), ST_Centroid(geometry)) <= {};
+
+                    '''.format(coords[1], coords[0], 1609*25)
+
+            # To panads
+            df_rg = pd.read_sql(query, con)
+
+            # To GeoPandas
+            df_rg['geom'] = gpd.GeoSeries.from_wkt(df_rg['geom'])
+            gdf_rg = gpd.GeoDataFrame(df_rg, geometry='geom')
+
+            gdf_rg['std_rent_growth'] = round(gdf_rg['std_rent_growth']*100,2)
+            s = gdf_rg['std_rent_growth'].astype(float)
+            label = "Volatility"
+
+            geo_level = "zip"
+            cscale = "Portland"
 
         if demo_dropdown == "Home":
             df = df_geo_sub[df_geo_sub['Median_Home_Value'] > 0]
             s = df['Median_Home_Value'].astype(float)
             label = "Median Home Value"
+            geo_level = "census"
 
         elif demo_dropdown == "Pop":
             s = df_geo_sub['Population'].astype(float)
             label = "Population"
+            geo_level = "census"
 
         elif demo_dropdown == "Income":
             df = df_geo_sub[df_geo_sub['Median_HH_Income'] > 0]
             s = df['Median_HH_Income'].astype(float)
             label = "Median Income"
+            geo_level = "census"
+
+        elif demo_dropdown == "Income-change":
+            df = df_geo_sub[(df_geo_sub['median_hh_income_percent_change'] > 0) & (df_geo_sub['median_hh_income_percent_change'] < 100)]
+            s = df['median_hh_income_percent_change'].astype(float)
+            label = "Income Change"
+            geo_level = "census"
+
+        elif demo_dropdown == "Pop-change":
+            df = df_geo_sub[(df_geo_sub['population_percent_change'] > 0) & (df_geo_sub['population_percent_change'] < 100)]
+            s = df['population_percent_change'].astype(float)
+            label = "Population Change"
+            geo_level = "census"
+
+        elif demo_dropdown == "Home-value-change":
+            df = df_geo_sub[(df_geo_sub['median_home_value_percent_change'] > 0) & (df_geo_sub['median_home_value_percent_change'] < 100)]
+            s = df['median_home_value_percent_change'].astype(float)
+            label = "Home Value Change"
+            geo_level = "census"
 
         elif demo_dropdown == "Price_Rent_Ratio":
             df = df_geo_sub[(df_geo_sub['price_rent_ratio'] > 0) & (df_geo_sub['price_rent_ratio'] < 80)]
             s = df['price_rent_ratio'].astype(float)
             label = "Price to Rent Ratio"
+            geo_level = "census"
 
         elif demo_dropdown == "Bachelor":
             df = df_geo_sub[df_geo_sub['Bachelor\'s Degree'] > 0]
             s = df['Bachelor\'s Degree'].astype(float)
             label = "Bachelor\'s Degree"
+            geo_level = "census"
 
         elif demo_dropdown == "Graduate":
             df = df_geo_sub[df_geo_sub['Graduate or Professional Degree'] > 0]
             s = df['Graduate or Professional Degree'].astype(float)
             label = "Graduate Degree"
+            geo_level = "census"
 
         if not overlay:
             datad.clear()
 
-        datad.append({
+        if geo_level == "census":
 
-                        "type": "choroplethmapbox",
-                        "geojson": df_geo.__geo_interface__,
-                        "locations": df_geo_sub['tract'],
-                        "z": s,
-                        "featureidkey": "properties.tract",
-                        "hovertext": df_geo_sub['Census_name'],
-                        "autocolorscale":False,
-                        "colorscale":"YlOrRd",
-                        "colorbar":dict(
-                                        title = label,
-                                        orientation = 'h',
-                                        x= -0.15,
-                                        xanchor= "left",
-                                        y= 0,
-                                        yanchor= "bottom",
-                                        showticklabels=True,
-                                        thickness= 20,
-                                        tickformatstops=dict(dtickrange=[0,10]),
-                                        titleside= 'top',
-                                        ticks= 'outside'
-                                       ),
-                        "zmin": s.min(),
-                        "zmax": s.max(),
-                        "marker_line_width": 0,
-                        "opacity": 0.2,
-                        "labels": label,
-                        "title": "Choropleth - Census Tract Level"
+            datad.append({
 
-                     }
-        )
+                            "type": "choroplethmapbox",
+                            "geojson": geo_json,
+                            "locations": df_geo_sub['tract'],
+                            "z": s,
+                            "featureidkey": "properties.tract",
+                            "hovertext": df_geo_sub['Census_name'],
+                            "autocolorscale":False,
+                            "colorscale":"Portland",
+                            "colorbar":dict(
+                                            title = dict(text=label,
+                                                         font=dict(size=12)
+                                                        ),
+                                            orientation = 'h',
+                                            x= -0.15,
+                                            xanchor= "left",
+                                            y= 0,
+                                            yanchor= "bottom",
+                                            showticklabels=True,
+                                            thickness= 20,
+                                            tickformatstops=dict(dtickrange=[0,10]),
+                                            titleside= 'top',
+                                            ticks= 'outside',
+                                            font = dict(size=12)
+                                           ),
+                            "zmin": s.min(),
+                            "zmax": s.max(),
+                            "marker_line_width": 0,
+                            "opacity": 0.2,
+                            "labels": label,
+                            "title": "Choropleth - Census Tract Level"
+
+                         }
+            )
+
+        elif geo_level == 'zip':
+
+            datad.append({
+
+                            "type": "choroplethmapbox",
+                            "geojson": gdf_rg.__geo_interface__,
+                            "locations": gdf_rg['zip_code'],
+                            "z": s,
+                            "featureidkey": "properties.zip_code",
+                            "hovertext": gdf_rg['MsaName'],
+                            "autocolorscale":False,
+                            "colorscale": cscale,
+                            "colorbar":dict(
+                                            title = dict(text=label,
+                                                         font=dict(size=12)
+                                                        ),
+                                            orientation = 'h',
+                                            x= -0.15,
+                                            xanchor= "left",
+                                            y= 0,
+                                            yanchor= "bottom",
+                                            showticklabels=True,
+                                            thickness= 20,
+                                            tickformatstops=dict(dtickrange=[0,10]),
+                                            titleside= 'top',
+                                            ticks= 'outside'
+                                           ),
+                            "zmin": s.min(),
+                            "zmax": s.max(),
+                            "marker_line_width": 0,
+                            "opacity": 0.2,
+                            "labels": label,
+                            "title": "Choropleth - Zip Code Level"
+
+                         }
+            )
 
     # Location data layer
-    if loc_dropdown:
+    if loc_dropdown is not None and loc_dropdown != "":
 
-        if 'mapbox.center' in mapdata and 'mapbox.zoom' in mapdata:
+        if mapdata is not None:
 
-            # set coords
-            coords[0] = mapdata['mapbox.center']['lat']
-            coords[1] = mapdata['mapbox.center']['lon']
+            if len(mapdata) > 1 and 'mapbox.center' in mapdata and 'mapbox.zoom' in mapdata:
 
-            # set zoom level
-            zoom = mapdata['mapbox.zoom']
+                # set coords
+                coords[0] = mapdata['mapbox.center']['lat']
+                coords[1] = mapdata['mapbox.center']['lon']
 
+                # set zoom level
+                zoom = mapdata['mapbox.zoom']
 
         g = geocoder.mapbox(coords, key=token, method='reverse')
         geojson = g.json
@@ -682,42 +893,45 @@ def update_map_deal(market, overlay, demo_dropdown, loc_dropdown, proptype, year
         elif loc_dropdown == "Gas":
             df_nearby = nearby_places(addr, loc_dropdown)
 
+        else:
+            df_nearby = None
+
         # Check if DataFrame was returned
-        if isinstance(df_nearby, pd.DataFrame):
+        if df_nearby is not None:
+            if isinstance(df_nearby, pd.DataFrame):
 
-           # Create a list of symbols by dict lookup
-           sym_list = []
+               # Create a list of symbols by dict lookup
+               sym_list = []
 
-           for i in df_nearby['type_label']:
-               typ = sym_dict.get(i)
-               sym_list.append(typ)
+               for i in df_nearby['type_label']:
+                   typ = sym_dict.get(i)
+                   sym_list.append(typ)
 
 
-           datad.append({
+               datad.append({
 
-                          "type": "scattermapbox",
-                          "lat": df_nearby["Lat"],
-                          "lon": df_nearby["Lng"],
-                          "name": "POI",
-                          "hovertext": df_nearby['name'],
-                          "showlegend": False,
-                          "hoverinfo": "text",
-                          "mode": "markers",
-                          "clickmode": "event+select",
-                          "marker": {
-                                     "symbol": sym_list,
-                                     "size": 15,
-                                     "opacity": 0.7,
-                                     "color": "blue"
-                                    }
-                          }
-           )
+                              "type": "scattermapbox",
+                              "lat": df_nearby["Lat"],
+                              "lon": df_nearby["Lng"],
+                              "name": "POI",
+                              "hovertext": df_nearby['name'],
+                              "showlegend": False,
+                              "hoverinfo": "text",
+                              "mode": "markers",
+                              "clickmode": "event+select",
+                              "marker": {
+                                         "symbol": sym_list,
+                                         "size": 15,
+                                         "opacity": 0.7,
+                                         "color": "blue"
+                                        }
+                              }
+               )
 
 
     layout = {
 
                  "autosize": True,
-                 "datarevision": 0,
                  "hovermode": "closest",
                  "mapbox": {
 
@@ -728,7 +942,6 @@ def update_map_deal(market, overlay, demo_dropdown, loc_dropdown, proptype, year
                          "lon": coords[1]
                      },
                      "pitch": 0,
-                     "opacity": 0.2,
                      "zoom": zoom,
                      "style": "streets",
 
@@ -745,18 +958,22 @@ def update_map_deal(market, overlay, demo_dropdown, loc_dropdown, proptype, year
     }
 
     # Rearrange so that scattermapbox is top layer
-    if datad[0]['type'] == 'scattermapbox':
-        datad.append(datad.pop(datad.index(datad[0])))
+    if len(datad) > 0:
 
-    if demo_dropdown or loc_dropdown:
-        return ({"data": datad, "layout": layout}, no_update)
+        if datad[0]['type'] == 'scattermapbox':
+            datad.append(datad.pop(datad.index(datad[0])))
 
-    elif show_properties_nclicks > 0:
-        return ({"data": datad, "layout": layout}, df1.to_dict("records"))
+        if show_properties_nclicks > 0:
+            return ({"data": datad, "layout": layout}, df1.to_dict("records"))
 
-    elif proptype == "Multi-Family" and market and show_properties_nclicks <= 0:
-        return ({"data": datad, "layout": layout}, no_update)
+        elif demo_dropdown != "" or loc_dropdown != "":
+            return ({"data": datad, "layout": layout}, no_update)
 
+        elif proptype == "Multi-Family" and market and show_properties_nclicks <= 0:
+            return ({"data": datad, "layout": layout}, no_update)
+
+    else:
+        return ({"data": data_def, "layout": layout}, no_update)
 
 
 # Update comps modal on click event
@@ -770,16 +987,16 @@ def update_map_deal(market, overlay, demo_dropdown, loc_dropdown, proptype, year
                                Output("Size_deal","children"),
                                Output("Yr_Built_deal","children"),
                                Output("Property_deal","children"),
-
-                               Output("RentSD", "children"),
-                               Output("Rent1BrD", "children"),
-                               Output("Rent2BrD", "children"),
-                               Output("Rent3BrD", "children"),
-
+                               Output("Rent_deal", "children"),
                                Output("Revenue_deal","children"),
                                Output("occ-modal_deal","children"),
                                Output("rent-area-modal_deal","children"),
                                Output("assessed-value_deal","children"),
+                               Output("cap-rate_deal","children"),
+                               Output("loan-status_deal","children"),
+                               Output("deal-type_deal","children"),
+                               Output("loan-seller_deal","children"),
+                               Output("owner-info_deal","children"),
                                Output("sale-date_deal","children"),
 
                           ],
@@ -810,70 +1027,63 @@ def display_popup2(clickData, n_clicks, is_open):
         Property = clickData["points"][0]["customdata"][4]
 
         '''
-        Parse rental data
+        Rents data
         '''
+        # Rents min - max
+        # rents_min_max = clickData["points"][0]["customdata"][5]
+        #
+        # # string to list
+        # rents_min_max1 = rents_min_max.replace(' ','')
+        # rents_min_max2 = rents_min_max1.replace('[','')
+        # rents_min_max3 = rents_min_max2.replace(']','')
+        #
+        # rents_min_max_lst = list(rents_min_max3.split(','))
+        #
+        # # Rents median
+        # price_median = clickData["points"][0]["customdata"][6]
+        #
+        # try:
+        #     if rents_min_max_lst[0] == rents_min_max_lst[1]:
+        #         Rents_fmt = "${:,.0f} (Median)".format(price_median)
+        #     else:
+        #         Rents_fmt = "${} - ${}".format(rents_min_max_lst[0], rents_min_max_lst[1])
+        # except:
+        #     print("Rents Exception", e)
+        #     Rents_fmt = "${:,.0f} (Median)".format(price_median)
 
-        l0 = []
-        l1 = []
-        l2 = []
-        l3 = []
+        # Rents Quantiles
+        rent_quantiles = clickData["points"][0]["customdata"][5]
 
-        r0_fmt = None
-        r1_fmt = None
-        r2_fmt = None
-        r3_fmt = None
+        rent_median = clickData["points"][0]["customdata"][6]
 
-        for i in clickData["points"][0]["customdata"][5]:
+        rent_median = clean_currency(rent_median)
 
-            # Check Apt type and calc. Avg. rent
-            if i['bed_rooms'] == 0:
-                l0.append(i)
+        try:
+            # string to list
+            rent_quantiles = [int(float(x)) for x in rent_quantiles.strip('[]').split()]
 
-                if len(l0) > 0:
-                    r0 = int(sum(p['avg_price'] for p in l0))/len(l0)
-                    r0_fmt = "${:,.0f}".format(r0)
-                else:
-                    r0_fmt = "N/A"
+            if rent_quantiles[0] == rent_quantiles[1]:
+                Rents_fmt = "${:,.0f} (Median)".format(float(rent_median))
+            else:
+                Rents_fmt = "${} - ${}".format(rent_quantiles[0], rent_quantiles[1])
+        except Exception as e:
+            print("Rents Exception", e)
+            Rents_fmt = "${:,.0f} (Median)".format(float(rent_median))
 
-            if i['bed_rooms'] == 1:
-                l1.append(i)
-
-                if len(l1) > 0:
-                    r1 = int(sum(p['avg_price'] for p in l1))/len(l1)
-                    r1_fmt = "${:,.0f}".format(r1)
-                else:
-                    r1_fmt = "N/A"
-
-            if i['bed_rooms'] == 2:
-                l2.append(i)
-
-                if len(l2) > 0:
-                    r2 = int(sum(p['avg_price'] for p in l2))/len(l2)
-                    r2_fmt = "${:,.0f}".format(r2)
-                else:
-                    r2_fmt = "N/A"
-
-            if i['bed_rooms'] == 3:
-                l3.append(i)
-
-                if len(l3) > 0:
-                    r3 = int(sum(p['avg_price'] for p in l3))/len(l3)
-                    r3_fmt = "${:,.0f}".format(r3)
-                else:
-                    r3_fmt = "N/A"
-
-        Revenue = clickData["points"][0]['customdata'][6]
-        Occupancy = clickData["points"][0]["customdata"][7]
-        RentArea = clickData["points"][0]["customdata"][8]
-        AssessedValue = clickData["points"][0]["customdata"][9]
-        lastSaleDate = clickData["points"][0]["customdata"][10]
-
-        # Formatting
-        Occupancy = float(Occupancy.strip('%'))
+        Revenue = clickData["points"][0]['customdata'][7]
+        Occupancy = clickData["points"][0]["customdata"][8]
+        RentArea = clickData["points"][0]["customdata"][9]
+        AssessedValue = clickData["points"][0]["customdata"][10]
+        CapRate = clickData["points"][0]["customdata"][11]
+        LoanStatus = clickData["points"][0]["customdata"][12]
+        DealType = clickData["points"][0]["customdata"][13]
+        LoanSeller = clickData["points"][0]["customdata"][14]
+        OwnerInfo = clickData["points"][0]["customdata"][15]
+        lastSaleDate = clickData["points"][0]["customdata"][16]
 
         # Construct a list of dictionaries
         # Filter Pandas DataFrame
-        df = df_geo[df_geo['Property Name'] == Name]
+        df = gdf[gdf['Property Name'] == Name]
 
         index = df.index[0]
         img_dict = df['Image_dicts'][index]
@@ -935,7 +1145,7 @@ def display_popup2(clickData, n_clicks, is_open):
         except Exception as e:
             print(e)
 
-        # formatted Rent for default view (NA) and calculated / post button click and handling of None values
+        # Formatted Rent for default view (NA) and calculated / post button click and handling of None values
 
         if Revenue is None:
             Revenue_fmt == "N/A"
@@ -946,6 +1156,7 @@ def display_popup2(clickData, n_clicks, is_open):
         if Occupancy is None:
             Occupancy_fmt == "N/A"
         else:
+            Occupancy = float(Occupancy)
             Occupancy_fmt = "{:.0f}%".format(Occupancy)
 
         if RentArea is None:
@@ -960,16 +1171,43 @@ def display_popup2(clickData, n_clicks, is_open):
         else:
             AssessedValue_fmt = AssessedValue
 
+        if CapRate is None:
+            CapRate_fmt = "N/A"
+        elif type(CapRate) != str:
+            CapRate = CapRate * 100
+            CapRate_fmt = "{:,.2f}%".format(CapRate)
+        else:
+            CapRate_fmt = CapRate
+
+        if LoanStatus == "null":
+            LoanStatus_fmt = "N/A"
+        else:
+            LoanStatus_fmt = LoanStatus
+
+        if DealType == "null":
+            DealType_fmt = "N/A"
+        else:
+            DealType_fmt = DealType
+
+        if LoanSeller == "null":
+            LoanSeller_fmt = "N/A"
+        else:
+            LoanSeller_fmt = LoanSeller
+
+        if OwnerInfo == "null":
+            OwnerInfo_fmt = "N/A"
+        else:
+            OwnerInfo_fmt = OwnerInfo
+
         if lastSaleDate == "null":
             lastSaleDate_fmt = "N/A"
         else:
             lastSaleDate_fmt = lastSaleDate
 
-        return(not is_open, carousel, Name, Address, Size, Built, Property, r0_fmt, r1_fmt, r2_fmt, r3_fmt, Revenue_fmt, Occupancy_fmt, RentArea_fmt, AssessedValue_fmt, lastSaleDate_fmt)
+        return(not is_open, carousel, Name, Address, Size, Built, Property, Rents_fmt, Revenue_fmt, Occupancy_fmt, RentArea_fmt, AssessedValue_fmt, CapRate_fmt, LoanStatus_fmt, DealType_fmt, LoanSeller_fmt, OwnerInfo_fmt, lastSaleDate_fmt)
 
     elif n_clicks:
-
         return is_open
 
     else:
-        return (no_update)
+        return no_update

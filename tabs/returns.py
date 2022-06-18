@@ -40,7 +40,7 @@ layout = html.Div([
 
    html.Div([
 
-       html.H2("Return Analysis", style={"text-align":"center","margin-left":"15%","margin-top":"1em"}),
+       html.H2("Custom Return Analysis", style={"text-align":"center","margin-left":"15%","margin-top":"1em"}),
 
    ]),
 
@@ -208,7 +208,7 @@ layout = html.Div([
                                       persistence = True,
                                       persistence_type = "memory",
                                       placeholder = "Years",
-                                      style = {"width":"25%"}
+                                      style = {"width":"12%"}
                                      ),
 
                       ]),
@@ -265,7 +265,22 @@ layout = html.Div([
                                    ],
                                    id="irr",
                                    color="light",
-                                   style={"width": "10rem", "margin-left": "2%", "margin-top": "2.5em", "height": "9em"}
+                                   style={"width": "10rem", "margin-left": "2%", "margin-top": "1.5em", "height": "9em"}
+                       ),
+
+                       dbc.Card(
+                                   [
+                                       dbc.CardHeader("Cash-on-cash"),
+                                       dbc.CardBody(
+                                           [
+                                               html.P(id="coc-card", style={"font-size": "1.6em"}),
+                                           ]
+
+                                       ),
+                                   ],
+                                   id="coc",
+                                   color="light",
+                                   style={"width": "10rem", "margin-left": "2%", "margin-top": "1.5em", "height": "9em"}
                        ),
 
                        dbc.Card(
@@ -280,22 +295,7 @@ layout = html.Div([
                                    ],
                                    id="ary",
                                    color="light",
-                                   style={"width": "10rem", "margin-left": "2%", "margin-top": "2.5em", "height": "9em"}
-                       ),
-
-                       dbc.Card(
-                                   [
-                                       dbc.CardHeader("ARY"),
-                                       dbc.CardBody(
-                                           [
-                                               html.P(id="ary-card", style={"font-size": "1.6em"}),
-                                           ]
-
-                                       ),
-                                   ],
-                                   id="ary",
-                                   color="light",
-                                   style={"width": "10rem", "margin-left": "2%", "margin-top": "2.5em", "height": "9em"}
+                                   style={"width": "10rem", "margin-left": "2%", "margin-top": "1.5em", "height": "9em"}
                        ),
 
 

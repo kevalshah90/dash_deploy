@@ -503,14 +503,18 @@ div#asking-rent-slider {
 .market-deal-style {
 
   height: 12px;
-  width: 30%;
+  width: 28%;
   float: left;
   margin-right: -60px;
 
 }
 
 div#market-deal {
-  width: 65%;
+  width: 55%;
+}
+
+button#returns_btn {
+  float: right;
 }
 
 .prop-type-deal-style {
@@ -580,6 +584,9 @@ div#overlay {
   margin-left: 0px;
 }
 
+.buy-box {
+  font-weight: bold;
+}
 
 .table-style-deal {
   width: 95%;
@@ -589,8 +596,8 @@ div#overlay {
 
 div#map-deal {
   display: inline-block;
-  width: 565%;
-  height:700px;
+  width: 590%;
+  height:500px;
   float: left;
   margin-left: 2em;
 }
@@ -603,6 +610,9 @@ div#map-deal {
   width: 8em;
 }
 
+.layers {
+  font-weight: bold;
+}
 
 /* returns */
 .address-return-ig {

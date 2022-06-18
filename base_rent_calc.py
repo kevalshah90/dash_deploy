@@ -93,6 +93,7 @@ df_sub = df_lease[['Year Built',
 
 # Convert percentage to numeric
 df_sub['Most Recent Physical Occupancy'] = df_sub['Most Recent Physical Occupancy'].apply(clean_percent).astype('float')
+
 # Currency to numeric
 df_sub['Operating Expenses at Contribution'] = df_sub['Operating Expenses at Contribution'].apply(clean_currency).astype('float')
 

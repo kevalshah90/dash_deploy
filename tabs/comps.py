@@ -1,6 +1,7 @@
 # Packages
 import pandas as pd
 import numpy as np
+from numpy import median
 import dash
 from dash.dependencies import Input, Output, State
 from dash import dcc
@@ -66,7 +67,7 @@ query = '''
         select *
         from stroom_main.df_raw_v1_march
         where City = 'San Francisco'
-        and avg_price < 10000
+        and price_median < 10000
         and Size >= 50
         LIMIT 25
         '''
@@ -139,7 +140,7 @@ layout = html.Div([
                                           dbc.CardBody(
                                               [
 
-                                                  html.H4(id="card-header"),
+                                                  html.H5(id="card-header"),
                                                   html.P(
                                                       id="card-text",
                                                       className="card-text",
@@ -235,20 +236,8 @@ layout = html.Div([
                                 dbc.Label("Year Built:", id="Yr_Built"),
                                 html.Br(),
 
-                                dbc.Label("Avg. Rent (Studio):", id="RentS_lbl", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
-                                dbc.Label("Rent:", id="RentS"),
-                                html.Br(),
-
-                                dbc.Label("Avg. Rent (1Br):", id="Rent1Br_lbl", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
-                                dbc.Label("Rent:", id="Rent1Br"),
-                                html.Br(),
-
-                                dbc.Label("Avg. Rent (2Br):", id="Rent2Br_lbl", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
-                                dbc.Label("Rent:", id="Rent2Br"),
-                                html.Br(),
-
-                                dbc.Label("Avg. Rent (3Br):", id="Rent3Br_lbl", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
-                                dbc.Label("Rent:", id="Rent3Br"),
+                                dbc.Label("Rents:", id="RentS_lbl", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
+                                dbc.Label("Rent:", id="RentCMBS"),
                                 html.Br(),
 
                                 dbc.Label("Fiscal Revenue:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
@@ -405,7 +394,11 @@ layout = html.Div([
                                 dbc.Label("Rentable Area:", id="rent-area-modal-s"),
                                 html.Br(),
 
-                                dbc.Label("Expected Fiscal Revenue:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
+                                dbc.Label("Est. Rent (Studio, 1/2/3 Bed):", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
+                                dbc.Label("Rents:", id="Rents-s"),
+                                html.Br(),
+
+                                dbc.Label("Estimated Fiscal Revenue:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
                                 dbc.Label("Revenue:", id="Revenue-s"),
                                 html.Br(),
 
@@ -441,7 +434,7 @@ layout = html.Div([
                 dbc.InputGroup(
                     [
 
-                        dbc.InputGroupAddon("Addres"),
+                        dbc.InputGroupAddon("Address"),
 
                         dcc.Input(id="address_autocomplete",
                                   persistence=True,
@@ -581,7 +574,7 @@ layout = html.Div([
                              {"id":"Year_Built","name": "Yr. Built"},
                              {"id":"Type","name":"Type"},
                              {"id":"bed_rooms","name":"# Beds"},
-                             {"id":"avg_price","name":"Avg. Rent"},
+                             {"id":"price_median","name":"Avg. Rent"},
                              {"id":"Preceding_Fiscal_Year_Revenue","name": "Revenue"},
                              {"id":"EstRentableArea","name": "Area (Sq.ft)"},
                              {"id":"Most_Recent_Physical_Occupancy","name":"Occ."},
@@ -644,9 +637,10 @@ layout = html.Div([
 
         html.Div(id="dummy-div"),
 
-        dcc.Store(id='result-store', storage_type='memory'),
-        dcc.Store(id="api-store", storage_type='memory'),
-        dcc.Store(id="query-store", storage_type='memory')
+        dcc.Store(id='result-store', storage_type='memory'), # df cmbs and non-cmbs
+        dcc.Store(id="api-store", storage_type='memory'), # api result
+        dcc.Store(id="query-store", storage_type='memory'), # img src
+        dcc.Store(id="table-store", storage_type='memory')
 
 ])
 
@@ -765,28 +759,20 @@ def autopopulate_propdetails(address, is_open):
             avdata = attom_api_avalue(addr)
             avdata = json.loads(avdata.decode("utf-8"))
 
+            print(avdata)
+
             try:
 
-                if avdata['status']['msg'] == 'SuccessWithoutResult' or avdata['Response']['status']['msg'] == 'Unauthorized':
+                if avdata['status']['msg'] == "SuccessWithResult" or avdata['property'] != []:
 
-                    print("Address Not Found")
-
-                    msg = "Address Not Found - Enter Manually"
-
-                    if is_open == True:
-                        return ('', '', '', '', '', no_update, {"display": "inline"}, msg, is_open)
-                    else:
-                        return ('', '', '', '', '', no_update, {"display": "inline"}, msg, not is_open)
-
-
-                if avdata['status']['msg'] == 'SuccessWithResult':
+                    print("Address Found")
                     # Year Built
                     try:
                         built = avdata['property'][0]['summary']['yearbuilt']
                         built = int(built)
                     except Exception as e:
                         built = no_update
-                        print(e)
+                        print("Year Built", e)
                         pass
 
                     # Area
@@ -802,7 +788,7 @@ def autopopulate_propdetails(address, is_open):
                                 pass
                         else:
                             area = no_update
-                            print(e)
+                            print("Area Exception", e)
                             pass
 
                     # Units
@@ -811,13 +797,24 @@ def autopopulate_propdetails(address, is_open):
                         units = int(units)
                     except Exception as e:
                         units = no_update
-                        print(e)
+                        print("Units Exception", e)
                         pass
 
                     # Get Ameneties
                     amn_lst = ["Luxurious", "Park", "Gym", "Laundry", "Pool", "Rent-control", "Bike", "Patio", "Concierge", "Heat"]
 
                 return (built, no_update, area, units, amn_lst, {"attom_api": avdata, "geohash": geohashval, "propdetails": details}, {"display": "none"}, no_update, not is_open)
+
+                if avdata['property'] == []:
+
+                    print("Address Not Found")
+
+                    msg = "Address Not Found - Enter Manually"
+
+                    if is_open == True:
+                        return ('', '', '', '', '', no_update, {"display": "inline"}, msg, is_open)
+                    else:
+                        return ('', '', '', '', '', no_update, {"display": "inline"}, msg, not is_open)
 
             except Exception as e:
                 print("Exception", e)
@@ -897,29 +894,23 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
         df['EstRevenueMonthly'] = (df['Preceding_Fiscal_Year_Revenue']/df['Size'])/12
         df['Distance'] = "N/A"
 
-        # Columns for groupby
-        grpcols = ['Property_Name','Address_Comp','Lat','Long','Size','Year_Built','Preceding_Fiscal_Year_Revenue','Opex','Occ','EstRentableArea','EstValue','lastSaleDate','Distance']
-
-        # Aggregate with rent dict
-        dff = df.groupby(grpcols)[['bed_rooms','avg_price','avg_size']].apply(lambda x: x.to_dict('records')).reset_index(name='rents')
-
         # Columns for customdata
-        cd_cols = ['Property_Name','Address_Comp','Size','Year_Built','rents','Preceding_Fiscal_Year_Revenue','Opex','Occ','EstRentableArea','EstValue','lastSaleDate','Distance']
+        cd_cols = ['Property_Name','Address_Comp','Size','Year_Built','price_min_max','price_median','Preceding_Fiscal_Year_Revenue','Opex','Occ','EstRentableArea','EstValue','lastSaleDate','Distance']
 
-        propname = dff["Property_Name"]
+        propname = df["Property_Name"]
 
         datac.append({
 
                         "type": "scattermapbox",
-                        "lat": dff['Lat'],
-                        "lon": dff['Long'],
+                        "lat": df['Lat'],
+                        "lon": df['Long'],
                         "name": "Location",
                         "hovertext": propname,
                         "showlegend": False,
                         "hoverinfo": "text",
                         "mode": "markers",
                         "clickmode": "event+select",
-                        "customdata": dff.loc[:,cd_cols].values, #subset .loc[row:col]
+                        "customdata": df.loc[:,cd_cols].values, #subset .loc[row:col]
                         "below": "''",
                         "marker": {
                             "symbol": "circle",
@@ -944,6 +935,10 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
            g = geocoder.mapbox(address, key=token)
            geojson = g.json
            addr = geojson["address"]
+
+           coords = [geojson['lat'], geojson['lng']]
+
+           geohashval = gh.encode(geojson['lat'], geojson['lng'], precision=5)
 
            query = '''
                    SELECT *
@@ -1016,10 +1011,11 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
                # Check if found in DB
                print("api store", api_store)
 
-               geohashval = api_store['geohash']
-
-               if api_store['propdetails'] is not None:
-                   details =  api_store['propdetails']
+               if api_store is not None:
+                   if api_store['propdetails'] is not None:
+                       details =  api_store['propdetails']
+                   else:
+                       details = None
                else:
                    details = None
 
@@ -1059,11 +1055,15 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
                    lastSaleDate = ten_today.strftime('%Y-%m-%d')
 
                # Property Tax - check API call, if not found prox_mean
-               if api_store['attom_api'] is not None:
-                   try:
-                       taxAmt = ['attom_api']['property'][0]['assessment']['tax']['taxamt']
-                       taxAmt = int(taxAmt)
-                   except Exception as e:
+               if api_store is not None:
+                   if api_store['attom_api'] is not None:
+                       try:
+                           taxAmt = ['attom_api']['property'][0]['assessment']['tax']['taxamt']
+                           taxAmt = int(taxAmt)
+                       except Exception as e:
+                           taxAmt = prox_mean(taxAmt_geo_df, geohashval)
+                           taxAmt = int(taxAmt)
+                   else:
                        taxAmt = prox_mean(taxAmt_geo_df, geohashval)
                        taxAmt = int(taxAmt)
                else:
@@ -1071,17 +1071,20 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
                    taxAmt = int(taxAmt)
 
                # Assessed Value - check API call, if not found prox_mean
-               if api_store['attom_api'] is not None:
-                   try:
-                       assVal = d['attom_api']['property'][0]['assessment']['assessed']['assdttlvalue']
-                       assVal = int(assVal)
-                   except Exception as e:
+               if api_store is not None:
+                   if api_store['attom_api'] is not None:
+                       try:
+                           assVal = d['attom_api']['property'][0]['assessment']['assessed']['assdttlvalue']
+                           assVal = int(assVal)
+                       except Exception as e:
+                           assVal = prox_mean(estVal_geo_df, geohashval)
+                           assVal = int(assVal)
+                   else:
                        assVal = prox_mean(estVal_geo_df, geohashval)
                        assVal = int(assVal)
                else:
                    assVal = prox_mean(estVal_geo_df, geohashval)
                    assVal = int(assVal)
-
 
                # Avg. Rents 1Br
                rent_1Br = prox_mean(rent1Br_geo_df, geohashval)
@@ -1110,29 +1113,23 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
 
                df_cmbs['Address_Comp'] = df_cmbs[addr_cols].apply(lambda row: ' '.join(row.values.astype(str)), axis=1)
 
-               # Columns for groupby
-               grpcols = ['Property_Name','Address_Comp','Lat','Long','Size','Year_Built','Preceding_Fiscal_Year_Revenue','Opex','Occ','EstRentableArea','EstValue','lastSaleDate','Distance']
-
-               # Aggregate with rent dict
-               dff_cmbs = df_cmbs.groupby(grpcols)[['bed_rooms','avg_price']].apply(lambda x: x.to_dict('records')).reset_index(name='rents')
-
                # Columns for customdata
-               cd_cols = ['Property_Name','Address_Comp','Size','Year_Built','rents','Preceding_Fiscal_Year_Revenue','Opex','Occ','EstRentableArea','EstValue','lastSaleDate','Distance']
+               cd_cols = ['Property_Name','Address_Comp','Size','Year_Built','price_min_max','price_median','Preceding_Fiscal_Year_Revenue','Opex','Occ','EstRentableArea','EstValue','lastSaleDate','Distance']
 
-               propname = dff_cmbs["Property_Name"]
+               propname = df_cmbs["Property_Name"]
 
                datap.append({
 
                              "type": "scattermapbox",
-                             "lat": dff_cmbs["Lat"],
-                             "lon": dff_cmbs["Long"],
+                             "lat": df_cmbs["Lat"],
+                             "lon": df_cmbs["Long"],
                              "name": "Location",
                              "hovertext": propname,
                              "showlegend": False,
                              "hoverinfo": "text",
                              "mode": "markers",
                              "clickmode": "event+select",
-                             "customdata": dff_cmbs.loc[:,cd_cols].values,
+                             "customdata": df_cmbs.loc[:,cd_cols].values,
                              "marker": {
                                         "symbol": "circle",
                                         "size": 8,
@@ -1144,7 +1141,7 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
 
 
                '''
-               Set of comps - Non CMBS
+               Set of Comps - Non CMBS
                '''
 
                df_noncmbs = result["df_noncmbs"]
@@ -1154,10 +1151,13 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
                df_noncmbs['EstRevenue'] = (df_noncmbs['unit_count'] * df_noncmbs['avg_rent'])*12
 
                # Columns for groupby
-               grpcols = ['imgSrc','name','address_comp','Lat','Long','unit_count','year_built','EstRevenue','EstRentableArea','EstValue','building_amenities','Distance']
+               grpcols = ['imgSrc','name','address_comp','Lat','Long','unit_count','year_built','EstRentableArea','EstValue','building_amenities','Distance']
 
                # Aggregate with rent dict
-               dff_noncmbs = df_noncmbs.groupby(grpcols)[['bed_rooms','avg_rent']].apply(lambda x: x.to_dict('records')).reset_index(name='rents')
+               df_noncmbs['rents'] = df_noncmbs[['bed_rooms', 'avg_rent']].to_dict(orient='records')
+
+               # Aggregate with rent dict
+               dff_noncmbs = df_noncmbs.groupby(grpcols, as_index=False).agg({'EstRevenue': 'mean', 'rents': list})
 
                # Columns for customdata
                cd_cols = ['imgSrc','name','address_comp','unit_count','year_built','rents','EstRevenue','EstRentableArea','EstValue','building_amenities','Distance']
@@ -1252,12 +1252,12 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
                else:
                    txt = "Expected Revenue: ${:.1f}M-${:.1f}M or approx. ${:.0f}/SF Yr.".format(min_fmt, max_fmt, price)
 
-               # Property Location
+               # Subject Property Location
                datap.append({
                              "type": "scattermapbox",
                              "lat": [Lat],
                              "lon": [Long],
-                             "hovertext": '${:.0f}'.format(price),
+                             "hovertext": 'Subject Property',
                              "text": txt,
                              "textfont": {"color": "rgb(0, 0, 0)",
                                           "size": 18},
@@ -1332,7 +1332,9 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
 
         if n_clicks and result:
             # Sub columns for DataTable
-            df_cmbs_sub = df_cmbs[['Property_Name','Zip_Code','bed_rooms','avg_price','Preceding_Fiscal_Year_Revenue','EstRentableArea','Most_Recent_Physical_Occupancy','Year_Built','Size','EstRevenueMonthly','Revenue_per_sqft_year','Opex','EstValue','Distance']]
+            df_cmbs['bed_rooms'] = "Overall"
+
+            df_cmbs_sub = df_cmbs[['Property_Name','Zip_Code','bed_rooms','price_median','Preceding_Fiscal_Year_Revenue','EstRentableArea','Most_Recent_Physical_Occupancy','Year_Built','Size','EstRevenueMonthly','Revenue_per_sqft_year','Opex','EstValue','Distance']]
 
             df_noncmbs_sub = df_noncmbs[['name','addressZipcode','bed_rooms','avg_rent','EstRevenue','EstRentableArea','year_built','unit_count','EstValue','Distance']]
 
@@ -1341,7 +1343,6 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
             return ({"data": datap, "layout": layout}, {"predicted": price, "market_price": market_price}, listToDict(details), {"df_cmbs": df_cmbs_sub.to_dict('records'), "df_noncmbs": df_noncmbs_sub.to_dict('records')}, df_cmbs_img.to_dict('records'), {"display": "none"}, no_update, no_update)
         else:
             df_sub = df[['Property_Name','Image_dicts']]
-
             return ({"data": datac, "layout": layout}, {"predicted": price, "market_price": market_price}, listToDict(details), no_update, df_sub.to_dict('records'), {"display": "none"}, no_update, no_update)
 
     else:
@@ -1368,15 +1369,15 @@ def update_image(n_clicks, price_values, space, api_store):
 
     try:
 
-        print(api_store)
-
         if n_clicks and api_store['propdetails'] and space:
 
             # 10% upside
             upside10 = (10 * float(api_store['propdetails'][8]))/float(api_store['propdetails'][8])
             upside10 = float(api_store['propdetails'][8]) + upside10
 
-            # Rents + Occupancy, add condition to check for occupancy below market level
+            # Rents + Occupancy, add condition to check for revenue and occupancy below market level
+
+            # If potential Revenue is < than 10% upside of existing revenue
             if float(price_values['predicted'] * space) <= upside10:
 
                 img_link = "https://stroom-images.s3.us-west-1.amazonaws.com/low_indicator.png"
@@ -1389,10 +1390,17 @@ def update_image(n_clicks, price_values, space, api_store):
 
             elif float(price_values['predicted'] * space) >= float(api_store['propdetails'][8]):
 
+                # Calculate percentage upside
+                diff = float(price_values['predicted'] * space) - float(api_store['propdetails'][8])
+                avg = (float(price_values['predicted'] * space) + float(api_store['propdetails'][8]))/2
+                pct_upside = int((diff / avg) * 100)
+
+                print("% upside", pct_upside, type(pct_upside))
+
                 img_link = "https://stroom-images.s3.us-west-1.amazonaws.com/high_indicator.png"
 
                 card_img_src = img_link
-                card_header = "Income Growth and Upside Potential"
+                card_header = "{}%-{}% Income Growth and Upside Potential".format(pct_upside-2, pct_upside+2)
                 card_text = "Rental revenue is lower than comparable market value."
 
                 return (card_img_src, card_header, card_text)
@@ -1426,6 +1434,7 @@ def update_image(n_clicks, price_values, space, api_store):
 @application.callback([
 
                           Output("comps-table", "data"),
+                          Output("table-store", "data"),
                           Output("rent-card", "children"),
                           Output("occ-card", "children"),
                           Output("opex-card", "children")
@@ -1467,10 +1476,13 @@ def update_table(address, proptype, built, units_acq, space_acq, ameneties, n_cl
 
        df_cmbs['Type'] = 'CMBS'
 
+       df_cmbs['bed_rooms'] = 'Overall'
+
        df_cmbs_v1 = pd.DataFrame(df_cmbs, columns = ["Property_Name","Type","Year_Built","bed_rooms","Size","Preceding_Fiscal_Year_Revenue",
                                                      "Most_Recent_Physical_Occupancy", "SubMarket", "City", "MSA", "EstRevenueMonthly",
-                                                     "Opex", "Address", "Zip_Code", "avg_price", "Revenue_per_sqft_year", "EstRentableArea",
+                                                     "Opex", "Address", "Zip_Code", "price_median", "Revenue_per_sqft_year", "EstRentableArea",
                                                      "EstValue","Distance"])
+
 
        # Prepare Non CMBS data
        df_noncmbs = pd.DataFrame(result_store["df_noncmbs"])
@@ -1479,10 +1491,11 @@ def update_table(address, proptype, built, units_acq, space_acq, ameneties, n_cl
 
        df_noncmbs.rename(columns={'name': 'Property_Name',
                                   'addressZipcode': 'Zip_Code',
-                                  'avg_rent': 'avg_price',
+                                  'avg_rent': 'price_median',
                                   'EstRevenue': 'Preceding_Fiscal_Year_Revenue',
                                   'year_built': 'Year_Built',
                                   'unit_count': 'Size'}, inplace=True)
+
 
        # Append
        df = pd.concat([df_cmbs_v1, df_noncmbs], ignore_index=True)
@@ -1506,7 +1519,7 @@ def update_table(address, proptype, built, units_acq, space_acq, ameneties, n_cl
                                                                                                             'Most_Recent_Physical_Occupancy': lambda x:stats.mode(x)[0][0],
                                                                                                             'EstRevenueMonthly': np.mean,
                                                                                                             'Opex': np.mean,
-                                                                                                            'avg_price': np.mean,
+                                                                                                            'price_median': np.mean,
                                                                                                             'Revenue_per_sqft_year': np.mean,
                                                                                                             'EstRentableArea': np.mean,
                                                                                                             'EstValue': np.mean,
@@ -1536,8 +1549,8 @@ def update_table(address, proptype, built, units_acq, space_acq, ameneties, n_cl
        if df['Opex'].isna().sum() != len(df['Opex']):
            df['Opex'] = df['Opex'].apply('${:,.0f}'.format)
 
-       if df['avg_price'].isna().sum() != len(df['avg_price']):
-           df['avg_price'] = df['avg_price'].apply('${:,.0f}'.format)
+       if df['price_median'].isna().sum() != len(df['price_median']):
+           df['price_median'] = df['price_median'].apply('${:,.0f}'.format)
 
        if df['EstValue'].isna().sum() != len(df['EstValue']):
            df['EstValue'] = df['EstValue'].apply('${:,.0f}'.format)
@@ -1561,10 +1574,10 @@ def update_table(address, proptype, built, units_acq, space_acq, ameneties, n_cl
        df1 = df
 
        # Rent col
-       if df1['avg_price'].isna().sum() != len(df1['avg_price']):
-           df1['avg_price'] = df1['avg_price'].apply(clean_currency).astype(float)
-           rent_col = df1[df1['avg_price'] > 0]
-           rent_avg = rent_col['avg_price'].median()
+       if df1['price_median'].isna().sum() != len(df1['price_median']):
+           df1['price_median'] = df1['price_median'].apply(clean_currency).astype(float)
+           rent_col = df1[df1['price_median'] > 0]
+           rent_avg = rent_col['price_median'].median()
            rent_avg = "${:,.0f}".format(rent_avg)
        else:
            rent_avg = "N/A"
@@ -1596,7 +1609,7 @@ def update_table(address, proptype, built, units_acq, space_acq, ameneties, n_cl
        else:
            opex_avg = "N/A"
 
-       return (comps_data, rent_avg, occ_avg, opex_avg)
+       return (comps_data, comps_data, rent_avg, occ_avg, opex_avg)
 
     else:
 
@@ -1604,223 +1617,157 @@ def update_table(address, proptype, built, units_acq, space_acq, ameneties, n_cl
 
 
 
-# Update comps modal on click event
+# Update CMBS modal
 @application.callback(
-                          [
-                               # Modal Comps
-                               Output("modal-1","is_open"),
-                               Output("carousel","children"),
-                               Output("prop_name","children"),
-                               Output("Address","children"),
-                               Output("Size","children"),
-                               Output("Yr_Built","children"),
 
-                               Output("RentS", "children"),
-                               Output("Rent1Br", "children"),
-                               Output("Rent2Br", "children"),
-                               Output("Rent3Br", "children"),
+                        [
 
-                               Output("Revenue","children"),
-                               Output("Opex","children"),
-                               Output("occ-modal","children"),
-                               Output("rent-area-modal","children"),
-                               Output("assessed-value","children"),
-                               Output("sale-date","children"),
-                               Output("distance","children"),
+                             Output("modal-1","is_open"),
+                             Output("carousel","children"),
+                             Output("prop_name","children"),
+                             Output("Address","children"),
+                             Output("Size","children"),
+                             Output("Yr_Built","children"),
+                             Output("RentCMBS", "children"),
+                             Output("Revenue","children"),
+                             Output("Opex","children"),
+                             Output("occ-modal","children"),
+                             Output("rent-area-modal","children"),
+                             Output("assessed-value","children"),
+                             Output("sale-date","children"),
+                             Output("distance","children")
 
-                               # Modal Subject Property
-                               Output("modal-2","is_open"),
-                               Output("carousel-s","children"),
-                               Output("Address-s","children"),
-                               Output("Size-s","children"),
-                               Output("Yr_Built-s","children"),
-                               Output("rent-area-modal-s","children"),
-                               Output("Revenue-s","children"),
-                               Output("assessed-val-s","children"),
-                               Output("prop-tax-s","children"),
+                        ],
 
-                               # Modal Zillow
-                               Output("modal-3","is_open"),
-                               Output("carousel-z","children"),
-                               Output("prop_name_z","children"),
-                               Output("Address_z","children"),
-                               Output("Size_z","children"),
-                               Output("Yr_Built_z","children"),
+                        [
+                             # Button clicks
+                             Input("map-graph1","clickData"),
+                             Input("close","n_clicks")
+                        ],
 
-                               Output("RentSZ", "children"),
-                               Output("Rent1BrZ", "children"),
-                               Output("Rent2BrZ", "children"),
-                               Output("Rent3BrZ", "children"),
+                        [
+                              State("modal-1", "is_open"),
+                              State("query-store", "data")
+                        ],
 
-                               Output("Revenue_z","children"),
-                               Output("rent-area-modal-z","children"),
-                               Output("assessed-value-z","children"),
-                               Output("ameneties_z","children"),
-                               Output("distance_z","children"),
-
-                          ],
-
-                          [
-                               # Button clicks
-                               Input("map-graph1","clickData"),
-                               Input("map-graph1", "selectedData"),
-                               Input("comps-button", "n_clicks"),
-                               Input("close","n_clicks"),
-                               Input("close-s","n_clicks"),
-                               Input("close-z","n_clicks")
-                          ],
-
-                          [
-                                State("modal-1", "is_open"),
-                                State("modal-2", "is_open"),
-                                State("modal-3", "is_open"),
-                                State("query-store", "data")
-                          ],
                     )
-def display_popup1(clickData, selectedData, n_clicks, n_clicks_c, n_clicks_sp, n_clicks_z, is_open_c, is_open_sp, is_open_z, query_store):
+def display_popup1(clickData, n_clicks, is_open_c, query_store):
 
-    if clickData:
+    if clickData and len(clickData['points'][0]['customdata']) == 13:
 
         res = json.dumps(clickData, indent=2)
 
         print("clickData response", res)
 
-        # Condition for CMBS clickData
-        if len(clickData['points'][0]['customdata']) == 12:
+        Name = clickData["points"][0]["customdata"][0]
+        Address = clickData["points"][0]["customdata"][1]
+        Size = clickData["points"][0]["customdata"][2]
+        Built = clickData["points"][0]["customdata"][3]
 
-            Name = clickData["points"][0]["customdata"][0]
-            Address = clickData["points"][0]["customdata"][1]
-            Size = clickData["points"][0]["customdata"][2]
-            Built = clickData["points"][0]["customdata"][3]
+        '''
+        Rents data
+        '''
+        # rents min and max
+        rents_min_max = clickData["points"][0]["customdata"][4]
 
-            '''
-            Parse rental data
-            '''
+        # string to list
+        rents_min_max1 = rents_min_max.replace(' ','')
+        rents_min_max2 = rents_min_max1.replace('[','')
+        rents_min_max3 = rents_min_max2.replace(']','')
 
-            l0 = []
-            l1 = []
-            l2 = []
-            l3 = []
+        rents_min_max_lst = list(rents_min_max3.split(','))
 
-            r0_fmt = None
-            r1_fmt = None
-            r2_fmt = None
-            r3_fmt = None
+        price_median = clickData["points"][0]["customdata"][5]
 
-            for i in clickData["points"][0]["customdata"][4]:
+        if rents_min_max_lst[0] == rents_min_max_lst[1]:
+            rents = "${:,.0f}".format(price_median)
+        else:
+            rents = "${} - ${}".format(rents_min_max_lst[0], rents_min_max_lst[1])
 
-                # Check Apt type and calc. Avg. rent
-                if i['bed_rooms'] == 0:
-                    l0.append(i)
+        Revenue = clickData["points"][0]['customdata'][6]
+        Opex = clickData["points"][0]['customdata'][7]
+        Occupancy = clickData["points"][0]["customdata"][8]
+        RentArea = clickData["points"][0]["customdata"][9]
+        AssessedValue = clickData["points"][0]["customdata"][10]
+        lastSaleDate = clickData["points"][0]["customdata"][11]
+        Distance = clickData["points"][0]["customdata"][12]
 
-                    if len(l0) > 0:
-                        r0 = int(sum(p['avg_price'] for p in l0))/len(l0)
-                        r0_fmt = "${:,.0f}".format(r0)
-                    else:
-                        r0_fmt = "N/A"
+        # Check dataframe - default view or property search geofilter
+        if query_store:
 
-                if i['bed_rooms'] == 1:
-                    l1.append(i)
+            df = pd.DataFrame(query_store)
 
-                    if len(l1) > 0:
-                        r1 = int(sum(p['avg_price'] for p in l1))/len(l1)
-                        r1_fmt = "${:,.0f}".format(r1)
-                    else:
-                        r1_fmt = "N/A"
+            # Construct a list of dictionaries
+            df = df[df['Property_Name'] == Name]
 
-                if i['bed_rooms'] == 2:
-                    l2.append(i)
+            index = df.index[0]
+            img_dict = df['Image_dicts'][index]
 
-                    if len(l2) > 0:
-                        r2 = int(sum(p['avg_price'] for p in l2))/len(l2)
-                        r2_fmt = "${:,.0f}".format(r2)
-                    else:
-                        r2_fmt = "N/A"
+            # Construct carousel object
+            try:
 
-                if i['bed_rooms'] == 3:
-                    l3.append(i)
+                if type(img_dict) is str:
 
-                    if len(l3) > 0:
-                        r3 = int(sum(p['avg_price'] for p in l3))/len(l3)
-                        r3_fmt = "${:,.0f}".format(r3)
-                    else:
-                        r3_fmt = "N/A"
+                    img_dict = ast.literal_eval(img_dict)
 
-            Revenue = clickData["points"][0]['customdata'][5]
-            Opex = clickData["points"][0]['customdata'][6]
-            Occupancy = clickData["points"][0]["customdata"][7]
-            RentArea = clickData["points"][0]["customdata"][8]
-            AssessedValue = clickData["points"][0]["customdata"][9]
-            lastSaleDate = clickData["points"][0]["customdata"][10]
-            Distance = clickData["points"][0]["customdata"][11]
+                    # Add labels for carousel items property
+                    c = 1
+                    img_list = []
 
-            # Check dataframe - default view or property search geofilter
-            if query_store:
+                    # Make a call to obtain pre-signed urls of each object in S3
+                    for key, values in img_dict.items():
 
-                df = pd.DataFrame(query_store)
+                        for v in values:
 
-                # Construct a list of dictionaries
-                df = df[df['Property_Name'] == Name]
+                            parts = os.path.split(v)
 
-                index = df.index[0]
-                img_dict = df['Image_dicts'][index]
+                            url = create_presigned_url('gmaps-images-6771', 'property_images/{}'.format(parts[len(parts)-1]))
 
-                # Construct carousel object
-                try:
+                            # Create a list of dicts for carousel
+                            img_dict1 = {"key": c, "src": url, "img_style": {"width": "300px", "height": "300px"}}
+                            c = c + 1
 
-                    if type(img_dict) is str:
+                            img_list.append(img_dict1)
 
-                        img_dict = ast.literal_eval(img_dict)
+                    carousel = dbc.Carousel(
+                                            items=img_list,
+                                            controls=True,
+                                            indicators=True,
+                               )
 
-                        # Add labels for carousel items property
-                        c = 1
-                        img_list = []
+                else:
 
-                        # Make a call to obtain pre-signed urls of each object in S3
-                        for key, values in img_dict.items():
+                     # Get streetview image
 
-                            for v in values:
+                     lat, long = get_geocodes(Address)
+                     name = streetview(lat, long, 'streetview')
 
-                                parts = os.path.split(v)
+                     # Construct URL
+                     url = create_presigned_url('gmaps-images-6771', 'property_images/{}'.format(name))
 
-                                url = create_presigned_url('gmaps-images-6771', 'property_images/{}'.format(parts[len(parts)-1]))
+                     if "None" in url:
+                         url = create_presigned_url('gmaps-images-6771', 'property_images/no_imagery.png')
 
-                                # Create a list of dicts for carousel
-                                img_dict1 = {"key": c, "src": url, "img_style": {"width": "300px", "height": "300px"}}
-                                c = c + 1
-
-                                img_list.append(img_dict1)
-
-                        carousel = dbc.Carousel(
-                                                items=img_list,
-                                                controls=True,
-                                                indicators=True,
-                                   )
-
-                    else:
-
-                         # Get streetview image
-
-                         lat, long = get_geocodes(Address)
-                         name = streetview(lat, long, 'streetview')
-
-                         # Construct URL
-                         url = create_presigned_url('gmaps-images-6771', 'property_images/{}'.format(name))
-
-                         if "None" in url:
-                             url = create_presigned_url('gmaps-images-6771', 'property_images/no_imagery.png')
-
-                         carousel = dbc.Carousel(
-                                                 items=[
-                                                         {"key": "1", "src": url, "img_style": {"width": "300px", "height": "300px"}},
-                                                 ],
-                                                 controls=False,
-                                                 indicators=False,
-                                    )
+                     carousel = dbc.Carousel(
+                                             items=[
+                                                     {"key": "1", "src": url, "img_style": {"width": "300px", "height": "300px"}},
+                                             ],
+                                             controls=False,
+                                             indicators=False,
+                                )
 
 
-                except Exception as e:
-                    print('Exception', e)
+            except Exception as e:
+                print('Exception', e)
+                url = create_presigned_url('gmaps-images-6771', 'property_images/no_imagery.png')
+
+                carousel = dbc.Carousel(
+                                        items=[
+                                                {"key": "1", "src": url, "img_style": {"width": "300px", "height": "300px"}},
+                                        ],
+                                        controls=False,
+                                        indicators=False,
+                            )
 
             if Revenue is None:
                 Revenue_fmt == "N/A"
@@ -1861,230 +1808,317 @@ def display_popup1(clickData, selectedData, n_clicks, n_clicks_c, n_clicks_sp, n
                 Distance = float(Distance)
                 Distance_fmt = "{:,.1f} miles".format(Distance)
 
-            return(not is_open_c, carousel, Name, Address, Size, Built, r0_fmt, r1_fmt, r2_fmt, r3_fmt, Revenue_fmt, Opex_fmt, Occupancy_fmt, RentArea_fmt, AssessedValue_fmt, lastSaleDate_fmt, Distance_fmt, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update)
+        return(not is_open_c, carousel, Name, Address, Size, Built, rents, Revenue_fmt, Opex_fmt, Occupancy_fmt, RentArea_fmt, AssessedValue_fmt, lastSaleDate_fmt, Distance_fmt)
+
+    elif n_clicks:
+        return is_open_c
+
+    else:
+        return no_update
+
+# Modal Subject Property
+@application.callback(
+                          [
+
+                               Output("modal-2","is_open"),
+                               Output("carousel-s","children"),
+                               Output("Address-s","children"),
+                               Output("Size-s","children"),
+                               Output("Yr_Built-s","children"),
+                               Output("rent-area-modal-s","children"),
+                               Output("Rents-s","children"),
+                               Output("Revenue-s","children"),
+                               Output("assessed-val-s","children"),
+                               Output("prop-tax-s","children")
+
+                          ],
+
+                          [
+                               # Button clicks
+                               Input("map-graph1","clickData"),
+                               Input("close-s","n_clicks")
+                          ],
+
+                          [
+                                State("modal-2", "is_open"),
+                                State("query-store", "data"),
+                                State("table-store", "data")
+                          ],
+                    )
+def display_popup2(clickData, n_clicks_sp, is_open_sp, query_store, table_store):
+
+    if clickData and len(clickData['points'][0]['customdata']) == 8:
+
+        res = json.dumps(clickData, indent=2)
+
+        print("clickData response", res)
 
         # subject property
-        elif len(clickData['points'][0]['customdata']) == 8:
+        Address = clickData["points"][0]["customdata"][0]
+        Size = clickData["points"][0]["customdata"][1]
+        Built = clickData["points"][0]["customdata"][2]
+        RentArea = clickData["points"][0]["customdata"][3]
+        ExpRevenueMin = clickData["points"][0]["customdata"][4]
+        ExpRevenueMax = clickData["points"][0]["customdata"][5]
+        AssessedVal = clickData["points"][0]["customdata"][6]
+        PropTax = clickData["points"][0]["customdata"][7]
 
-            Address = clickData["points"][0]["customdata"][0]
-            Size = clickData["points"][0]["customdata"][1]
-            Built = clickData["points"][0]["customdata"][2]
-            RentArea = clickData["points"][0]["customdata"][3]
-            ExpRevenueMin = clickData["points"][0]["customdata"][4]
-            ExpRevenueMax = clickData["points"][0]["customdata"][5]
-            AssessedVal = clickData["points"][0]["customdata"][6]
-            PropTax = clickData["points"][0]["customdata"][7]
+        # Get coordinates
+        lat, long = get_geocodes(Address)
 
-            # Get coordinates
-            lat, long = get_geocodes(Address)
+        # Get updated name of the streetview image
+        name = streetview(lat, long, 'streetview')
 
-            # Get updated name of the streetview image
-            name = streetview(lat, long, 'streetview')
+        # Construct URL
+        url = create_presigned_url('gmaps-images-6771', 'property_images/{}'.format(name))
 
-            # Construct URL
-            url = create_presigned_url('gmaps-images-6771', 'property_images/{}'.format(name))
+        if "None" in url:
+            url = create_presigned_url('gmaps-images-6771', 'property_images/no_imagery.png')
 
-            if "None" in url:
-                url = create_presigned_url('gmaps-images-6771', 'property_images/no_imagery.png')
+        carousel = dbc.Carousel(
+                                items=[
+                                         {"key": "1", "src": url, "img_style": {"width": "300px", "height": "300px"}},
+                                ],
+                                controls=False,
+                                indicators=False,
+                   )
+
+        # Calculate Rents from Comps Table
+        if table_store:
+            df = pd.DataFrame(table_store)
+            s = df['price_median'].apply(clean_currency).astype(float)
+
+            rmin = s.min()
+            rmax = s.max()
+
+            rents_fmt = "${:,.0f} - ${:,.0f}".format(rmin, rmax)
+        else:
+            rents_fmt = "N/A"
+
+        # Formatted for default view (NA) and post button click and handling of None value
+        if RentArea is None:
+            RentArea_fmt = "N/A"
+        else:
+            RentArea = int(RentArea)
+            RentArea_fmt = "{:,.0f} sq.ft".format(RentArea)
+
+        if ExpRevenueMin is None:
+            ExpRevenue_fmt = "N/A"
+
+        else:
+
+            ExpRevenueMin = float(ExpRevenueMin)
+            ExpRevenueMax = float(ExpRevenueMax)
+
+            if ExpRevenueMin > -1 and ExpRevenueMax <= 1 and ExpRevenueMax > -1 and ExpRevenueMax < 1:
+                ExpRevenueMin = ExpRevenueMin * 1000
+                ExpRevenueMax = ExpRevenueMax * 1000
+                ExpRevenue_fmt = "${:.0f}K - ${:.0f}K".format(ExpRevenueMin, ExpRevenueMax)
+
+            elif ExpRevenueMin > -1 and ExpRevenueMin < 1 and ExpRevenueMax > 1:
+                ExpRevenueMin = ExpRevenueMin * 1000
+                ExpRevenue_fmt = "${:.0f}K - ${:.1f}M".format(ExpRevenueMin, ExpRevenueMax)
+
+            elif ExpRevenueMin > 1 and ExpRevenueMax > 1:
+                ExpRevenue_fmt = "${:.1f}M - ${:.1f}M".format(ExpRevenueMin, ExpRevenueMax)
+
+            else:
+                ExpRevenue_fmt = "${:.1f}M - ${:.1f}M".format(ExpRevenueMin, ExpRevenueMax)
+
+        if AssessedVal is None:
+            AssessedVal_fmt = "N/A"
+        else:
+            AssessedVal = int(AssessedVal)
+            AssessedVal_fmt = "${:,.0f}".format(AssessedVal)
+
+        if PropTax is None:
+            PropTax_fmt = "N/A"
+        else:
+            PropTax = int(PropTax)
+            PropTax_fmt = "${:,.0f}".format(PropTax)
+
+        return(not is_open_sp, carousel, Address, Size, Built, RentArea_fmt, rents_fmt, ExpRevenue_fmt, AssessedVal_fmt, PropTax_fmt)
+
+    elif n_clicks_sp:
+        return is_open_sp
+
+    else:
+        return no_update
+
+# Modal Zillow
+@application.callback(
+                          [
+
+                               Output("modal-3","is_open"),
+                               Output("carousel-z","children"),
+                               Output("prop_name_z","children"),
+                               Output("Address_z","children"),
+                               Output("Size_z","children"),
+                               Output("Yr_Built_z","children"),
+
+                               Output("RentSZ", "children"),
+                               Output("Rent1BrZ", "children"),
+                               Output("Rent2BrZ", "children"),
+                               Output("Rent3BrZ", "children"),
+
+                               Output("Revenue_z","children"),
+                               Output("rent-area-modal-z","children"),
+                               Output("assessed-value-z","children"),
+                               Output("ameneties_z","children"),
+                               Output("distance_z","children"),
+
+                          ],
+
+                          [
+                               # Button clicks
+                               Input("map-graph1","clickData"),
+                               Input("close-z","n_clicks")
+                          ],
+
+                          [
+                                State("modal-3", "is_open"),
+                                State("query-store", "data")
+                          ],
+                    )
+def display_popup3(clickData, n_clicks_z, is_open_z, query_store):
+
+    if clickData and len(clickData['points'][0]['customdata']) == 11:
+
+        img_link = clickData["points"][0]["customdata"][0]
+        Name = clickData["points"][0]["customdata"][1]
+        Address = clickData["points"][0]["customdata"][2]
+        Size = clickData["points"][0]["customdata"][3]
+        Built = clickData["points"][0]["customdata"][4]
+
+        '''
+        Parse rental data
+        '''
+
+        l0 = []
+        l1 = []
+        l2 = []
+        l3 = []
+
+        r0_fmt = None
+        r1_fmt = None
+        r2_fmt = None
+        r3_fmt = None
+
+        for i in clickData["points"][0]["customdata"][5]:
+
+            # Check Apt type and calc. Avg. rent
+            if i['bed_rooms'] == 0:
+                l0.append(i)
+
+                if len(l0) > 0:
+                    r0 = int(sum(p['avg_rent'] for p in l0))/len(l0)
+                    r0_fmt = "${:,.0f}".format(r0)
+                else:
+                    r0_fmt = "N/A"
+
+            if i['bed_rooms'] == 1:
+                l1.append(i)
+
+                if len(l1) > 0:
+                    r1 = int(sum(p['avg_rent'] for p in l1))/len(l1)
+                    r1_fmt = "${:,.0f}".format(r1)
+                else:
+                    r1_fmt = "N/A"
+
+            if i['bed_rooms'] == 2:
+                l2.append(i)
+
+                if len(l2) > 0:
+                    r2 = int(sum(p['avg_rent'] for p in l2))/len(l2)
+                    r2_fmt = "${:,.0f}".format(r2)
+                else:
+                    r2_fmt = "N/A"
+
+            if i['bed_rooms'] == 3:
+                l3.append(i)
+
+                if len(l3) > 0:
+                    r3 = int(sum(p['avg_rent'] for p in l3))/len(l3)
+                    r3_fmt = "${:,.0f}".format(r3)
+                else:
+                    r3_fmt = "N/A"
+
+        Revenue = clickData["points"][0]["customdata"][6]
+        RentArea = clickData["points"][0]["customdata"][7]
+        AssessedVal = clickData["points"][0]["customdata"][8]
+        Ameneties = clickData["points"][0]["customdata"][9]
+        Distance = clickData["points"][0]["customdata"][10]
+
+        if img_link:
 
             carousel = dbc.Carousel(
                                     items=[
-                                             {"key": "1", "src": url, "img_style": {"width": "300px", "height": "300px"}},
+                                             {"key": "1", "src": img_link, "img_style": {"width": "300px", "height": "300px"}},
                                     ],
-                                    controls=False,
-                                    indicators=False,
+                                    controls=True,
+                                    indicators=True,
                        )
 
-
-            # formatted for default view (NA) and calculated / post button click and handling of None value
-            if RentArea is None:
-                RentArea_fmt = "N/A"
-            else:
-                RentArea = int(RentArea)
-                RentArea_fmt = "{:,.0f} sq.ft".format(RentArea)
-
-            if ExpRevenueMin is None:
-
-                ExpRevenue_fmt = "N/A"
-
-            else:
-
-                ExpRevenueMin = float(ExpRevenueMin)
-                ExpRevenueMax = float(ExpRevenueMax)
-
-                if ExpRevenueMin > -1 and ExpRevenueMax <= 1 and ExpRevenueMax > -1 and ExpRevenueMax < 1:
-                    ExpRevenueMin = ExpRevenueMin * 1000
-                    ExpRevenueMax = ExpRevenueMin * 1000
-                    ExpRevenue_fmt = "${:.0f}K-${:.0f}K".format(ExpRevenueMin, ExpRevenueMax)
-
-                elif ExpRevenueMin > -1 and ExpRevenueMin < 1 and ExpRevenueMax > 1:
-                    ExpRevenueMin = ExpRevenueMin * 1000
-                    ExpRevenue_fmt = "${:.0f}K-${:.1f}M".format(ExpRevenueMin, ExpRevenueMax)
-
-                elif ExpRevenueMin > 1 and ExpRevenueMax > 1:
-                    ExpRevenue_fmt = "${:.1f}M-${:.1f}M".format(ExpRevenueMin, ExpRevenueMax)
-
-                else:
-                    ExpRevenue_fmt = "${:.1f}M-${:.1f}M".format(ExpRevenueMin, ExpRevenueMax)
-
-            if AssessedVal is None:
-                AssessedVal_fmt = "N/A"
-            else:
-                AssessedVal = int(AssessedVal)
-                AssessedVal_fmt = "${:,.0f}".format(AssessedVal)
-
-            if PropTax is None:
-                PropTax_fmt = "N/A"
-            else:
-                PropTax = int(PropTax)
-                PropTax_fmt = "${:,.0f}".format(PropTax)
-
-            return(no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, not is_open_sp, carousel, Address, Size, Built, RentArea_fmt, ExpRevenue_fmt, AssessedVal_fmt, PropTax_fmt, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update)
-
-        elif n_clicks_sp:
-            return is_open
-
-        # zillow data
-        elif len(clickData['points'][0]['customdata']) == 11:
-
-            img_link = clickData["points"][0]["customdata"][0]
-            Name = clickData["points"][0]["customdata"][1]
-            Address = clickData["points"][0]["customdata"][2]
-            Size = clickData["points"][0]["customdata"][3]
-            Built = clickData["points"][0]["customdata"][4]
-
-            '''
-            Parse rental data
-            '''
-
-            l0 = []
-            l1 = []
-            l2 = []
-            l3 = []
-
-            r0_fmt = None
-            r1_fmt = None
-            r2_fmt = None
-            r3_fmt = None
-
-            for i in clickData["points"][0]["customdata"][5]:
-
-                # Check Apt type and calc. Avg. rent
-                if i['bed_rooms'] == 0:
-                    l0.append(i)
-
-                    if len(l0) > 0:
-                        r0 = int(sum(p['avg_rent'] for p in l0))/len(l0)
-                        r0_fmt = "${:,.0f}".format(r0)
-                    else:
-                        r0_fmt = "N/A"
-
-                if i['bed_rooms'] == 1:
-                    l1.append(i)
-
-                    if len(l1) > 0:
-                        r1 = int(sum(p['avg_rent'] for p in l1))/len(l1)
-                        r1_fmt = "${:,.0f}".format(r1)
-                    else:
-                        r1_fmt = "N/A"
-
-                if i['bed_rooms'] == 2:
-                    l2.append(i)
-
-                    if len(l2) > 0:
-                        r2 = int(sum(p['avg_rent'] for p in l2))/len(l2)
-                        r2_fmt = "${:,.0f}".format(r2)
-                    else:
-                        r2_fmt = "N/A"
-
-                if i['bed_rooms'] == 3:
-                    l3.append(i)
-
-                    if len(l3) > 0:
-                        r3 = int(sum(p['avg_rent'] for p in l3))/len(l3)
-                        r3_fmt = "${:,.0f}".format(r3)
-                    else:
-                        r3_fmt = "N/A"
-
-            Revenue = clickData["points"][0]["customdata"][6]
-            RentArea = clickData["points"][0]["customdata"][7]
-            AssessedVal = clickData["points"][0]["customdata"][8]
-            Ameneties = clickData["points"][0]["customdata"][9]
-            Distance = clickData["points"][0]["customdata"][10]
-
-            if img_link:
-
-                carousel = dbc.Carousel(
-                                        items=[
-                                                 {"key": "1", "src": img_link, "img_style": {"width": "300px", "height": "300px"}},
-                                        ],
-                                        controls=True,
-                                        indicators=True,
-                           )
-
-            # formatted for default view (NA) and calculated / post button click and handling of None value
-            if Name in [None, 'nan']:
-                Name_fmt = "Unknown"
-            else:
-                Name_fmt = Name
-
-            if Address in [None, 'nan']:
-                Address_fmt = "Unknown"
-            else:
-                Address_fmt = Address
-
-            if Size in [None, 'nan']:
-                Size_fmt = "Unknown"
-            else:
-                Size_fmt = int(Size)
-
-            if Built in [None, 'nan']:
-                Built_fmt = "Unknown"
-            else:
-                Built_fmt = int(float(Built))
-
-            if Revenue in [None, 'nan']:
-                Revenue_fmt = "Unknown"
-            else:
-                Revenue = float(Revenue)
-                Revenue_fmt = "${:,.0f}".format(Revenue)
-
-            if RentArea in [None, 'nan']:
-                RentArea_fmt = "Unknown"
-            else:
-                RentArea = int(float(RentArea))
-                RentArea_fmt = "{:,.0f} sq.ft".format(RentArea)
-
-            if AssessedVal in [None, 'nan']:
-                AssessedVal_fmt = "Unknown"
-            else:
-                AssessedVal = int(float(AssessedVal))
-                AssessedVal_fmt = "${:,.0f}".format(AssessedVal)
-
-            if Ameneties in [None, 'nan']:
-                Ameneties_fmt = "Unknown"
-            else:
-                Ameneties = ast.literal_eval(Ameneties)
-                Ameneties = ', '.join(Ameneties)
-                Ameneties_fmt = Ameneties
-
-            if Distance == "N/A":
-                Distance_fmt = Distance
-            else:
-                Distance = float(Distance)
-                Distance_fmt = "{:,.1f} miles".format(Distance)
-
-            return(no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, not is_open_z, carousel, Name_fmt, Address_fmt, Size_fmt, Built_fmt, r0_fmt, r1_fmt, r2_fmt, r3_fmt, Revenue_fmt, RentArea_fmt, AssessedVal_fmt, Ameneties_fmt, Distance_fmt)
-
-        elif n_clicks_z:
-            return is_open
-
+        # formatted for default view (NA) and calculated / post button click and handling of None value
+        if Name in [None, 'nan']:
+            Name_fmt = "Unknown"
         else:
-            return (no_update)
+            Name_fmt = Name
+
+        if Address in [None, 'nan']:
+            Address_fmt = "Unknown"
+        else:
+            Address_fmt = Address
+
+        if Size in [None, 'nan']:
+            Size_fmt = "Unknown"
+        else:
+            Size_fmt = int(Size)
+
+        if Built in [None, 'nan']:
+            Built_fmt = "Unknown"
+        else:
+            Built_fmt = int(float(Built))
+
+        if Revenue in [None, 'nan']:
+            Revenue_fmt = "Unknown"
+        else:
+            Revenue = float(Revenue)
+            Revenue_fmt = "${:,.0f}".format(Revenue)
+
+        if RentArea in [None, 'nan']:
+            RentArea_fmt = "Unknown"
+        else:
+            RentArea = int(float(RentArea))
+            RentArea_fmt = "{:,.0f} sq.ft".format(RentArea)
+
+        if AssessedVal in [None, 'nan']:
+            AssessedVal_fmt = "Unknown"
+        else:
+            AssessedVal = int(float(AssessedVal))
+            AssessedVal_fmt = "${:,.0f}".format(AssessedVal)
+
+        if Ameneties in [None, 'nan']:
+            Ameneties_fmt = "Unknown"
+        else:
+            Ameneties = ast.literal_eval(Ameneties)
+            Ameneties = ', '.join(Ameneties)
+            Ameneties_fmt = Ameneties
+
+        if Distance == "N/A":
+            Distance_fmt = Distance
+        else:
+            Distance = float(Distance)
+            Distance_fmt = "{:,.1f} miles".format(Distance)
+
+        return(not is_open_z, carousel, Name_fmt, Address_fmt, Size_fmt, Built_fmt, r0_fmt, r1_fmt, r2_fmt, r3_fmt, Revenue_fmt, RentArea_fmt, AssessedVal_fmt, Ameneties_fmt, Distance_fmt)
+
+    elif n_clicks_z:
+        return is_open_z
 
     else:
+        return no_update
 
-        return (no_update)
 
 
 
