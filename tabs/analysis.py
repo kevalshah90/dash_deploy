@@ -50,7 +50,7 @@ client = bigquery.Client(project = "stroom-data-exploration")
 os.environ.setdefault("GCLOUD_PROJECT", "stroom-data-exploration")
 
 # Mapbox
-MAPBOX_KEY = "pk.eyJ1Ijoia2V2YWxzaGFoIiwiYSI6ImNqeDNsNzY2YTAwN3g0YW13aHMyNXIwMHAifQ.Hx8cPYyTFTSXP9ixiNcrTw"
+MAPBOX_KEY = "pk.eyJ1Ijoic3Ryb29tIiwiYSI6ImNsNWVnMmpueTEwejQza252ZnN4Zm02bG4ifQ.SMGyKFikz4uDDqN6JvEq7Q"
 token = MAPBOX_KEY
 Geocoder = mapbox.Geocoder(access_token=token)
 

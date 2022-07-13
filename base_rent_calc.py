@@ -32,7 +32,7 @@ gmaps = googlemaps.Client(key='AIzaSyC0XCzdNwzI26ad9XXgwFRn2s7HrCWnCOk')
 # Mapbox API
 import mapbox
 from mapbox import Geocoder
-MAPBOX_ACCESS_TOKEN='pk.eyJ1Ijoia2V2YWxzaGFoIiwiYSI6ImNqbW1nbG90MDBhNTQza3IwM3pvd2I3bGUifQ.dzdTsg69SdUXY4zE9s2VGg'
+MAPBOX_ACCESS_TOKEN='pk.eyJ1Ijoic3Ryb29tIiwiYSI6ImNsNWVnMmpueTEwejQza252ZnN4Zm02bG4ifQ.SMGyKFikz4uDDqN6JvEq7Q'
 # Must be a public token, starting with `pk`
 token = MAPBOX_ACCESS_TOKEN
 geocoder = mapbox.Geocoder(access_token=token)
@@ -246,7 +246,7 @@ def calc_rent(prop_address, proptype, yr_built, space, units, ameneties, assval,
     for i in range(2):
 
         query = '''
-                select * from stroom_main.df_raw_v1_march
+                select * from stroom_main.df_raw_v3_july
                 where st_distance_sphere(Point({},{}), coords) <= {};
                 '''.format(Long, Lat, radius_cmbs)
 
@@ -293,6 +293,8 @@ def calc_rent(prop_address, proptype, yr_built, space, units, ameneties, assval,
     Non-CMBS data
     '''
 
+    dfc = pd.DataFrame({})
+
     # Get the state to be passed into the query
     if geocode_result:
 
@@ -309,8 +311,8 @@ def calc_rent(prop_address, proptype, yr_built, space, units, ameneties, assval,
                         # Search radius - miles to meters
                         radius_noncmbs = 1.5*1609
 
-                        # Attempt to expand radius 3x
-                        for i in range(3):
+                        # Attempt to expand radius 2x
+                        for i in range(2):
 
                             # Run query
                             query = '''
@@ -334,7 +336,6 @@ def calc_rent(prop_address, proptype, yr_built, space, units, ameneties, assval,
                                 radius_noncmbs = radius_noncmbs * 2
                             else:
                                 break
-
 
     if df_comps.shape[0] > 0:
 
@@ -360,7 +361,8 @@ def calc_rent(prop_address, proptype, yr_built, space, units, ameneties, assval,
 
         dfc.sort_values(by='unit_count', ascending=False, inplace=True)
 
-    if radius_noncmbs >= radius_cmbs:
+    # If non cmbs properties found and radius greater than cmbs
+    if radius_noncmbs >= radius_cmbs and dfc.shape[0] > 0:
         radius = radius_noncmbs
     else:
         radius = radius_cmbs

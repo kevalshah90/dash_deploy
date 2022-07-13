@@ -19,7 +19,7 @@ from collections import defaultdict
 from dash.dash import no_update
 import json
 import plotly.io as pio
-from cap_rate_calc import calc_caprate
+from funcs import get_geocodes
 from decimal import Decimal
 import re
 from re import sub
@@ -31,9 +31,22 @@ import locale
 import googlemaps
 gmaps = googlemaps.Client(key="AIzaSyC0XCzdNwzI26ad9XXgwFRn2s7HrCWnCOk")
 
-MAPBOX_KEY="pk.eyJ1Ijoia2V2YWxzaGFoIiwiYSI6ImNqbW1nbG90MDBhNTQza3IwM3pvd2I3bGUifQ.dzdTsg69SdUXY4zE9s2VGg"
+# Mapbox
+MAPBOX_KEY="pk.eyJ1Ijoic3Ryb29tIiwiYSI6ImNsNWVnMmpueTEwejQza252ZnN4Zm02bG4ifQ.SMGyKFikz4uDDqN6JvEq7Q"
 token = MAPBOX_KEY
 geocoder = mapbox.Geocoder(access_token=token)
+
+# mysql connection
+import pymysql
+from sqlalchemy import create_engine
+user = 'stroom'
+pwd = 'Stroomrds'
+host =  'aa1jp4wsh8skxvw.csl5a9cjrheo.us-west-1.rds.amazonaws.com'
+port = 3306
+database = 'stroom_main'
+engine = create_engine("mysql+pymysql://{}:{}@{}/{}".format(user,pwd,host,database))
+con = engine.connect()
+
 
 
 layout = html.Div([
@@ -55,39 +68,31 @@ layout = html.Div([
                    dbc.InputGroup(
                        [
 
-                           dbc.InputGroupAddon("Address", style={"height":"max-content","margin-left":"4px"}),
-                           dbc.Input(
+                           # dbc.Card(
+                           #      dbc.CardBody(
+                           #          [
+                           #              html.H6("Name:", className="card-title", style={"color":"black", "font-weight": "bold"}),
+                           #              html.P(id="propname-card", style={"font-size": "1em"}, className="card-text"),
+                           #          ]
+                           #      ),
+                           #      #className="w-40 mb-3",
+                           #      style={'width':'40%'}
+                           # ),
 
-                                     id="address-return",
-                                     type="text",
-
-                                    ),
+                           dbc.Card(
+                                dbc.CardBody(
+                                    [
+                                        html.H5("Address:", className="card-title", style={"color":"black", "font-weight": "bold"}),
+                                        html.P(id="address-card", style={"font-size": "1.5em"}, className="card-text"),
+                                    ]
+                                ),
+                                #className="w-60 mb-3",
+                                style={'width':'100%'}
+                           ),
 
                        ],
                        id = "address-return-ig"
                    ),
-
-
-                   # Asset Information
-                   dbc.InputGroup([
-
-                       # Rent Growth
-                       dbc.Label("Asset: ", style={"font-size" : "100%", "margin-right": "4px"}),
-                       dbc.InputGroupAddon("Type", style={"height":"max-content","margin-left":"4px"}),
-                       dcc.Dropdown(
-                                 id="asset-type",
-                                 options=[
-
-                                     {"label": "Multi-Family", "value": "Multi-Family"}
-
-                                 ],
-                                 value="Multi-Family",
-                                 persistence=True,
-                                 persistence_type="memory",
-                                 style={"height":"48px", "width":"50%"},
-                                ),
-
-                   ]),
 
 
 
@@ -102,7 +107,8 @@ layout = html.Div([
                                  type="number",
                                  persistence=True,
                                  persistence_type="memory",
-                                 placeholder = "%"
+                                 placeholder = "%",
+                                 style={"height":"auto"}
                                 ),
 
                        dbc.InputGroupAddon("Max", style={"height":"max-content","margin-left":"4px"}),
@@ -111,10 +117,11 @@ layout = html.Div([
                                  type="number",
                                  persistence=True,
                                  persistence_type="memory",
-                                 placeholder = "%"
+                                 placeholder = "%",
+                                 style={"height":"auto"}
                                 ),
 
-                   ]),
+                   ], style={"height":"44px"}),
 
 
                     # Opex
@@ -126,17 +133,19 @@ layout = html.Div([
                         dbc.Input(
                                   id="op-exp-return",
                                   persistence=True,
-                                  persistence_type="memory"
+                                  persistence_type="memory",
+                                  style={"height":"auto"}
                                  ),
 
                         dbc.InputGroupAddon("Taxes", style={"height":"max-content"}),
                         dbc.Input(
                                   id="tax-return",
                                   persistence=True,
-                                  persistence_type="memory"
+                                  persistence_type="memory",
+                                  style={"height":"auto"}
                                  ),
 
-                     ]),
+                     ], style={"height":"44px"}),
 
                      # Operating Expenses growth
                      dbc.InputGroup([
@@ -159,7 +168,8 @@ layout = html.Div([
                                    type="number",
                                    value=2,
                                    persistence=True,
-                                   persistence_type="memory"
+                                   persistence_type="memory",
+                                   style={"height":"auto"}
                                   ),
 
                          dbc.InputGroupAddon("Max", style={"height":"max-content","margin-left":"4px"}),
@@ -168,10 +178,11 @@ layout = html.Div([
                                    type="number",
                                    value=4,
                                    persistence=True,
-                                   persistence_type="memory"
+                                   persistence_type="memory",
+                                   style={"height":"auto"}
                                   ),
 
-                     ]),
+                     ], style={"height":"44px"}),
 
 
 
@@ -196,7 +207,8 @@ layout = html.Div([
                                        id="disc-rate",
                                        value = 8,
                                        persistence=True,
-                                       persistence_type="memory"
+                                       persistence_type="memory",
+                                       style={"height":"auto"}
                                       ),
 
 
@@ -208,10 +220,10 @@ layout = html.Div([
                                       persistence = True,
                                       persistence_type = "memory",
                                       placeholder = "Years",
-                                      style = {"width":"12%"}
+                                      style = {"width":"12%", "height":"auto"}
                                      ),
 
-                      ]),
+                      ], style={"height":"44px"}),
 
 
                       html.Div([
@@ -245,7 +257,7 @@ layout = html.Div([
                    dcc.Graph(
 
                                id="returns-graph",
-                               style={"display": "inline-block", "width": "600px", "float": "left", "height":"350px"}
+                               style={"display": "inline-block", "width": "600px", "float": "left", "height":"350px", "margin-top":"24%"}
 
                    ),
 
@@ -265,7 +277,7 @@ layout = html.Div([
                                    ],
                                    id="irr",
                                    color="light",
-                                   style={"width": "10rem", "margin-left": "2%", "margin-top": "1.5em", "height": "9em"}
+                                   style={"width": "7rem", "margin-left": "2%", "margin-top": "1.5em", "height": "7em"}
                        ),
 
                        dbc.Card(
@@ -280,7 +292,7 @@ layout = html.Div([
                                    ],
                                    id="coc",
                                    color="light",
-                                   style={"width": "10rem", "margin-left": "2%", "margin-top": "1.5em", "height": "9em"}
+                                   style={"width": "7rem", "margin-left": "2%", "margin-top": "1.5em", "height": "7em"}
                        ),
 
                        dbc.Card(
@@ -295,7 +307,22 @@ layout = html.Div([
                                    ],
                                    id="ary",
                                    color="light",
-                                   style={"width": "10rem", "margin-left": "2%", "margin-top": "1.5em", "height": "9em"}
+                                   style={"width": "7rem", "margin-left": "2%", "margin-top": "1.5em", "height": "7em"}
+                       ),
+
+                       dbc.Card(
+                                   [
+                                       dbc.CardHeader("Exit Cap"),
+                                       dbc.CardBody(
+                                           [
+                                               html.P(id="ecap-card", style={"font-size": "1.6em"}),
+                                           ]
+
+                                       ),
+                                   ],
+                                   id="ecap",
+                                   color="light",
+                                   style={"width": "7rem", "margin-left": "2%", "margin-top": "1.5em", "height": "7em"}
                        ),
 
 
@@ -306,6 +333,9 @@ layout = html.Div([
         ], justify="between"),
 
     ], className = "investment-block"),
+
+    # dummy
+    html.Div(id="dummy-div-returns"),
 
     # Row #3 DataTable
     dbc.Row(
@@ -381,11 +411,60 @@ layout = html.Div([
 
 
 # Callbacks
-@application.callback(Output("address-return","value"),
-                     [
-                          Input("result-store","data")
-                     ]
+@application.callback(
+                      [
+                        #Output("propname-card","children"),
+                        Output("address-card","children"),
+                        Output("rent-min","value"),
+                        Output("rent-max","value")
+                      ],
+                      [
+                         Input("dummy-div-returns", "value"),
+                      ],
+                      [
+                         State("modal-store", "data")
+                      ]
                     )
-def pop_fields(result_store):
+def populate_fields(dummy, modal_store):
 
-    print("result store", result_store)
+    print("modal store", type(modal_store), modal_store)
+
+    Name = modal_store["points"][0]["customdata"][0]
+    Address = modal_store["points"][0]["customdata"][1]
+
+    if modal_store['points'][0]['lat'] and modal_store['points'][0]['lon']:
+        Lat = modal_store['points'][0]['lat']
+        Long = modal_store['points'][0]['lon']
+    else:
+        Lat, Long = get_geocodes(Address)
+
+    # Query Rent Growth
+    con = engine.connect()
+
+    query = '''
+
+            select MsaName, zip_code, pct_change AS pct_change, ST_AsText(geometry) as geom
+            from stroom_main.gdf_rent_growth_july
+            GROUP BY MsaName, zip_code, Year, geometry
+            HAVING st_distance_sphere(Point({},{}), ST_Centroid(geometry)) <= {};
+
+            '''.format(Long, Lat, 1609*5)
+
+    df_rg = pd.read_sql(query, con)
+
+    if df_rg.shape[0] > 0:
+
+        rgs = df_rg[df_rg['pct_change'] > 0]['pct_change']
+
+        # Calculate quantiles
+        q25 = rgs.quantile(.25)*100
+        q75 = rgs.quantile(.75)*100
+
+        q25_fmt = "{:.0f}%".format(q25)
+        q75_fmt = "{:.0f}%".format(q75)
+
+        return (Address, q25_fmt, q75_fmt)
+
+    else:
+
+        return (Address, no_update, no_update)

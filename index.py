@@ -48,8 +48,8 @@ application.layout = html.Div([
                                         [
                                             dbc.NavLink("Deals", href="/deals", active="partial"),
                                             dbc.NavLink("Comps", href="/comps", active="partial"),
-                                            dbc.NavLink("Market", href="/market", active="partial"),
-                                            dbc.NavLink("Returns (Beta)", href="/returns", active="partial")
+                                            #dbc.NavLink("Market", href="/market", active="partial"),
+                                            dbc.NavLink("Returns", href="/returns", active="partial")
 
                                         ],
                                         vertical=True,
@@ -78,7 +78,7 @@ application.layout = html.Div([
                             dcc.Store(id="comps-store", storage_type="local"),
 
                             # Store component for graphs
-                            dcc.Store(id="analysis-store", storage_type="local"),
+                            dcc.Store(id="modal-store", storage_type="local")
 
                             ],
 

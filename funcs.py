@@ -17,7 +17,7 @@ import http.client
 import urllib.parse
 
 # mapbox
-MAPBOX_KEY="pk.eyJ1Ijoia2V2YWxzaGFoIiwiYSI6ImNqeDNsNzY2YTAwN3g0YW13aHMyNXIwMHAifQ.Hx8cPYyTFTSXP9ixiNcrTw"
+MAPBOX_KEY="pk.eyJ1Ijoic3Ryb29tIiwiYSI6ImNsNWVnMmpueTEwejQza252ZnN4Zm02bG4ifQ.SMGyKFikz4uDDqN6JvEq7Q"
 token = MAPBOX_KEY
 
 # google maps api key
@@ -361,7 +361,7 @@ def attom_api_avalue(address):
 
     headers = {
         'accept': "application/json",
-        'apikey': "0365176532543d32d93508fcee28bf97",
+        'apikey': "407cbd2300b77764311ed005c9d94376",
         }
 
     addr = urllib.parse.quote(address)
@@ -389,28 +389,3 @@ def prox_mean(df, x, n=3):
     else:
         df['tmp_dist'] = df['geohash'].apply(lambda y: approximate_distance(y,x))
         return df.nlargest(n, 'tmp_dist')['value'].mean()
-
-
-# Layout coords Dictionary
-coords_dict = dict()
-metros = [
-          'Los Angeles-Long Beach-Santa Ana, CA MSA',
-          'San Jose-Sunnyvale-Santa Clara, CA MSA',
-          'San Francisco-Oakland-Fremont, CA MSA',
-          'San Diego-Carlsbad-San Marcos, CA MSA',
-          'Phoenix-Mesa-Scottsdale, AZ MSA',
-          'Tucson, AZ MSA'
-         ]
-
-coords_list = [
-                [34.0522,-118.2437],
-                [37.3672, -121.9334],
-                [37.7749, -122.4194],
-                [32.7157, -117.1611],
-                [33.4484, -112.0740],
-                [32.1558, -111.02389]
-              ]
-
-for i in range(len(metros)):
-
-    coords_dict[metros[i]] = coords_list[i]
