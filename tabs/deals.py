@@ -27,7 +27,7 @@ from dash.dash import no_update
 from dash.exceptions import PreventUpdate
 import io
 from urllib.request import urlopen
-from funcs import clean_percent, clean_currency, get_geocodes, create_presigned_url, streetview, nearby_places, sym_dict, valid_geom
+from funcs import clean_percent, clean_currency, get_geocodes, create_presigned_url, streetview, nearby_places, sym_dict, valid_geoms
 
 # US Census libraries and API key
 import censusgeocode as cg
@@ -61,31 +61,52 @@ database = 'stroom_main'
 engine = create_engine("mysql+pymysql://{}:{}@{}/{}".format(user,pwd,host,database))
 con = engine.connect()
 
+# def valid_geoms(x):
+#     try:
+#         return wkt.loads(x)
+#     except:
+#         return np.nan
+
 #Query GeoData
 try:
+
+    # Tuple of markets
+    msa = (
+           'San Francisco-Oakland-Fremont, CA MSA',
+           'San Jose-Sunnyvale-Santa Clara, CA MSA',
+           'Los Angeles-Long Beach-Santa Ana, CA MSA',
+           'San Diego-Carlsbad-San Marcos, CA MSA',
+           'Phoenix-Mesa-Scottsdale, AZ MSA',
+           'Dallas-Fort Worth-Arlington, TX MSA',
+           'Austin-Round Rock, TX MSA'
+    )
+
     query = '''
-            select * from stroom_main.usgeodata_v1
-            '''
+            select distinct MSA
+            from stroom_main.df_raw_july
+            where MSA IN {}
+            '''.format(msa)
 
-    df_geo = pd.read_sql(query, con)
+    df_market = pd.read_sql(query, con)
 
-    df_geo.tract_geom = df_geo.tract_geom.apply(valid_geom)
+    query = '''
+            select distinct Loan_Status
+            from stroom_main.df_raw_july
+            where MSA IN {}
+            '''.format(msa)
 
-    Market_List = list(df_geo['MSA'].unique())
-    LoanStatus_List = list(df_geo['Loan Status'].unique())
+    df_loan = pd.read_sql(query, con)
 
-    # # Convert to GeoDataFrame
-    gdf = gpd.GeoDataFrame(df_geo[df_geo['tract_geom'].notna()], geometry='tract_geom')
-    # Polygon to strings
-    gdf['tract_geom'] = gdf.tract_geom.apply(lambda x: wkt.dumps(x))
+    Market_List = list(df_market['MSA'].unique())
+    LoanStatus_List = list(df_loan['Loan_Status'].unique())
 
 except Exception as e:
     print("usgeodata query exception", e)
-    df_geo = pd.DataFrame({})
-
+    df_market = pd.DataFrame({})
+    df_loan = pd.DataFrame({})
 
 # Read census tract level geometries and geo data
-url = 'https://stroom-images.s3.us-west-1.amazonaws.com/uscensusgeo_v1.geojson'
+url = "https://stroom-images.s3.us-west-1.amazonaws.com/usgeodata_july.geojson"
 
 with urlopen(url) as response:
     geo_json = json.load(response)
@@ -100,7 +121,7 @@ layout = html.Div([
                         dbc.InputGroup(
                             [
 
-                               dbc.InputGroupAddon("Market"),
+                               dbc.InputGroupText("Market"),
 
                                html.Datalist(id="market-list",
                                              children=[
@@ -127,7 +148,7 @@ layout = html.Div([
                         dbc.InputGroup(
                             [
 
-                               dbc.InputGroupAddon("Upside"),
+                               dbc.InputGroupText("Upside"),
                                dcc.Dropdown(
 
                                               id="upside-deal",
@@ -153,7 +174,7 @@ layout = html.Div([
                         dbc.InputGroup(
                             [
 
-                                dbc.InputGroupAddon("Year Built"),
+                                dbc.InputGroupText("Year Built"),
                                 dbc.Input(
                                           id="year-built-min",
                                           persistence=True,
@@ -174,7 +195,7 @@ layout = html.Div([
                         dbc.InputGroup(
                             [
 
-                                dbc.InputGroupAddon("Units"),
+                                dbc.InputGroupText("Units"),
                                 dbc.Input(
                                           id="num-units-min",
                                           persistence=True,
@@ -196,7 +217,7 @@ layout = html.Div([
                         dbc.InputGroup(
                             [
 
-                               dbc.InputGroupAddon("Loan"),
+                               dbc.InputGroupText("Loan"),
                                dcc.Dropdown(
 
                                               id="loan-deal",
@@ -214,8 +235,9 @@ layout = html.Div([
 
                         ),
 
-                        dbc.Button("Show Properties", id="show-properties-button", className="me-1", n_clicks=0),
+                        dbc.Label(id="prop_count", style={"float":"right", "color":"black", "font-weight": "bold"}),
 
+                        #dbc.Button("Clear Properties", id="clear-properties-button", className="me-1", style={'height': '48px'}, n_clicks=0),
 
                    ], className="row-1-deal"),
 
@@ -306,7 +328,8 @@ layout = html.Div([
                                     type = "default",
                                     className = "map-loading",
                                     fullscreen=False,
-                                    children=dcc.Graph(id="map-deal"),
+                                    children=dcc.Graph(id="map-deal")
+                                    #parent_style = {"opacity":"0.5"}
                                 ),
 
                             ], className="deal-map-style"),
@@ -339,11 +362,6 @@ layout = html.Div([
                                                     style={"width": "11rem", "position": "relative", "float": "right", "margin-top": "1.5%"},
                                                 ),
 
-                                                dbc.Label("Name:", style={"color":"black", "font-weight": "bold", "margin-right":"10px", "margin-top":"1.5%", "float":"left"}),
-                                                dbc.Label("Name:", id="prop_name_deal", style={"float":"left", "margin-top":"1.5%"}),
-                                                html.Br(),
-                                                html.Br(),
-
                                                 dbc.Label("Property Type: ", style={"color":"black", "font-weight": "bold", "margin-right":"10px", "margin-top":"1%", "float":"left"}),
                                                 dbc.Label("Property Type:", id="Property_deal", style={"float":"left", "margin-top":"1%"}),
                                                 html.Br(),
@@ -364,6 +382,15 @@ layout = html.Div([
                                                 html.Br(),
                                                 html.Br(),
 
+                                                dbc.Label("Rentable Area:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
+                                                dbc.Label("Rentable Area:", id="rent-area-modal_deal", style={"float":"right", "margin-top":"1%"}),
+                                                html.Br(),
+
+                                                dbc.Label("Name:", style={"color":"black", "font-weight": "bold", "margin-right":"10px", "margin-top":"1.5%", "float":"left"}),
+                                                dbc.Label("Name:", id="prop_name_deal", style={"float":"left", "margin-top":"1%"}),
+                                                html.Br(),
+                                                html.Br(),
+
                                                 dbc.Label("Address:", style={"color":"black", "font-weight": "bold", "margin-right":"10px", "margin-top":"0%"}),
                                                 dbc.Label("Address:", id="Address_deal", style={"float":"right", "margin-top":"0%"}),
                                                 html.Br(),
@@ -378,10 +405,6 @@ layout = html.Div([
 
                                                 dbc.Label("Opex:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
                                                 dbc.Label("Opex:", id="Opex_deal", style={"float":"right"}),
-                                                html.Br(),
-
-                                                dbc.Label("Rentable Area:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
-                                                dbc.Label("Rentable Area:", id="rent-area-modal_deal", style={"float":"right"}),
                                                 html.Br(),
 
                                                 dbc.Label("Assessed Value:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
@@ -409,7 +432,7 @@ layout = html.Div([
                                                 html.Br(),
 
                                                 dbc.Label("Owner Info:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
-                                                dbc.Label("Owner Info:", id="owner-info_deal", style={"float":"right"}),
+                                                dbc.Label("Owner Info:", id="owner-info_deal", style={"float":"right", "font-size": "12px"}),
                                                 html.Br(),
 
                                                 dbc.Label("Last Sale Date:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
@@ -420,7 +443,7 @@ layout = html.Div([
                                                 dbc.Label("Last Sale Price:", id="sale-price_deal", style={"float":"right"}),
                                                 html.Br(),
 
-                                                dbc.Button("View Returns Profile", color="primary", size="lg", id="returns_btn", className="mr-1", href="/returns", style={"float":"right"})
+                                                #dbc.Button("View Returns Profile", color="primary", size="lg", id="returns_btn", className="mr-1", href="/returns", style={"float":"right"})
 
                                             ]
                                         ),
@@ -452,17 +475,17 @@ layout = html.Div([
 
                                     id="comps-table-deal",
 
-                                    columns=[{"id":"Property Name","name":"Property Name"},
-                                             {"id":"Zip Code","name":"Zip Code"},
-                                             {"id":"Year Built","name": "Year Built"},
-                                             {"id":"EstRentableArea","name": "Area (Sq.ft)"},
-                                             {"id":"Size","name": "Number of Units"},
-                                             {"id":"Preceding Fiscal Year Revenue","name": "Fiscal Revenue"},
-                                             {"id":"Preceding Fiscal Year Operating Expenses", "name":"Fiscal Opex"},
-                                             {"id":"Most Recent Physical Occupancy","name":"Occupancy"},
-                                             {"id":"zrent_median","name": "Rent (Median)"},
+                                    columns=[{"id":"Property_Name", "name":"Property Name"},
+                                             {"id":"Zip_Code", "name":"Zip Code"},
+                                             {"id":"Year_Built", "name": "Year Built"},
+                                             {"id":"EstRentableArea", "name": "Area (Sq.ft)"},
+                                             {"id":"Size", "name": "Number of Units"},
+                                             {"id":"Preceding_Fiscal_Year_Revenue", "name": "Fiscal Revenue"},
+                                             {"id":"Preceding_Fiscal_Year_Operating_Expenses", "name":"Fiscal Opex"},
+                                             {"id":"Most_Recent_Physical_Occupancy", "name":"Occupancy"},
+                                             {"id":"zrent_median", "name": "Rent (Median)"},
                                              {'id':"EstValue", "name":"Assessed Value"},
-                                             {'id':"Loan Status", "name":"Loan Status"},
+                                             {'id':"Loan_Status", "name":"Loan Status"},
                                              {'id':"lastSaleDate", "name":"Last Sale Date"}],
 
                                     style_cell={
@@ -508,7 +531,7 @@ layout = html.Div([
                                     page_size = 10,
                                     sort_action="native",
                                     filter_action="native",
-                                    row_deletable=True,
+                                    #row_deletable=True,
                                     export_format="csv"
                                 ),
 
@@ -521,16 +544,20 @@ layout = html.Div([
 
 
 # Callbacks
-
 # Update map graph
+
 @application.callback([
 
                           Output("map-deal", "figure"),
                           Output("comps-table-deal", "data"),
+                          Output("prop_count", "children"),
+
+                          # Map data storage component
+                          Output("msa-prop-store", "data"),
+                          Output("rg-store", "data")
 
                       ],
                       [
-
                           Input("market-deal", "value"),
                           Input("upside-deal", "value"),
                           Input("loan-deal", "value"),
@@ -541,23 +568,25 @@ layout = html.Div([
                           Input("year-built-max", "value"),
                           Input("num-units-min", "value"),
                           Input("num-units-max", "value"),
-                          Input("show-properties-button", "n_clicks"),
+                          #Input("clear-properties-button", "n_clicks"),
                           Input("map-deal", "relayoutData")
-
                       ],
-
+                      [
+                          State("msa-prop-store", "data"),
+                          State("rg-store", "data")
+                      ],
                       )
-def update_map_deal(market, upside_dropdown, loan_dropdown, overlay, demo_dropdown, loc_dropdown, year_built_min, year_built_max, num_units_min, num_units_max, show_properties_nclicks, mapdata):
+def update_map_deal(market, upside_dropdown, loan_dropdown, overlay, demo_dropdown, loc_dropdown, year_built_min, year_built_max, num_units_min, num_units_max, mapdata, msa_store, rg_store):
 
     # check for triggered inputs / states
     ctx = dash.callback_context
+    print("triggered id", ctx.triggered_id)
 
     coords = [0,0]
 
     # Default layout - Continental USA
     coords[0] = 37.0902
     coords[1] = -95.7129
-
     zoom = 3
 
     if mapdata is not None:
@@ -594,39 +623,46 @@ def update_map_deal(market, upside_dropdown, loan_dropdown, overlay, demo_dropdo
                     }
     )
 
-    if market or ctx.triggered[0]['prop_id'] == 'market-deal.value':
+    # Set flag to check if market is triggered
+    msa_ctx = False
 
-        if market in Market_List:
-            lat, long = get_geocodes(market)
-            coords[0] = lat
-            coords[1] = long
-            zoom = 9
+    if market is not None and market in Market_List or ctx.triggered_id == 'market-deal' and ctx.triggered[0]['value'] in Market_List:
+    #if ctx.triggered_id == 'market-deal' and ctx.triggered[0]['value'] in Market_List:
 
-        elif ctx.triggered[0]['value'] in Market_List:
-            lat, long = get_geocodes(market)
-            coords[0] = lat
-            coords[1] = long
-            zoom = 9
+        # Update market select flag
+        msa_ctx = True
+
+        lat, long = get_geocodes(market.split('-')[0] + ' ,United States')
+        coords[0] = lat
+        coords[1] = long
+        zoom = 10
+
+        print(coords)
 
     # Reset to default coords when market cleared
-    if market == '' or market is None:
+    elif market is None and market not in Market_List or ctx.triggered_id == 'market-deal' and ctx.triggered[0]['value'] == '':
+
+        datad.clear()
+        df_msa = pd.DataFrame({})
+
+        # Update market select Flag
+        msa_ctx = False
+
         # Default view - US continental
         coords[0] = 37.0902
         coords[1] = -95.7129
         zoom = 3
 
-    for i in range(len(ctx.triggered)):
-        if ctx.triggered[i]['prop_id'] == 'market-deal.value' and ctx.triggered[i]['value'] == '':
-            # Default view - US continental
-            coords[0] = 37.0902
-            coords[1] = -95.7129
-            zoom = 3
+    if market is not None and market in Market_List or ctx.triggered_id == 'market-deal':
 
-    if market and show_properties_nclicks > 0:
+        # Market is selected, not triggered.
+        if mapdata is not None: #and ctx.triggered_id != 'market-deal' and ctx.triggered[0]['prop_id'] == 'map-deal.relayoutData':
 
-        if mapdata is not None:
+            #print('set coords market selected not triggered')
 
             if len(mapdata) > 1 and 'mapbox.center' in mapdata and 'mapbox.zoom' in mapdata:
+
+                print("mapdata", mapdata)
 
                 # set coords
                 coords[0] = mapdata['mapbox.center']['lat']
@@ -635,35 +671,76 @@ def update_map_deal(market, upside_dropdown, loan_dropdown, overlay, demo_dropdo
                 # set zoom level
                 zoom = mapdata['mapbox.zoom']
 
-        # Plot sample properties - match with starting view of the map
-        df_msa = gdf[gdf['MSA'] == market]
+        # Find properties within 10 mile radius
+        query = '''
+                select Property_Name,
+                       Property_Type,
+                       Year_Built,
+                       Size,
+                       Address,
+                       City,
+                       State,
+                       Zip_Code,
+                       Lat,
+                       `Long`,
+                       Image_dicts,
+                       diff_potential,
+                       Loan_Status,
+                       Deal_Type,
+                       Loan_Seller,
+                       EstRentableArea,
+                       EstValue,
+                       zrent_quantile_random,
+                       zrent_median,
+                       Preceding_Fiscal_Year_Revenue,
+                       Preceding_Fiscal_Year_Operating_Expenses,
+                       Most_Recent_Physical_Occupancy,
+                       Cap_Rate_Iss,
+                       PartyOwner1NameFull,
+                       lastSaleDate,
+                       lastSalePrice
+                from stroom_main.usgeodata_july_v1
+                where st_distance_sphere(Point({},{}), coords) <= {};
+                '''.format(coords[1], coords[0], 1609*10)
 
-        # Apply filters
-        df_msa['Year Built'] = df_msa['Year Built'].astype(int)
+        df_msa = pd.read_sql(query, con)
 
-        df_msa['Size'] = df_msa['Size'].astype(int)
+    # check previously queried from datastore
+    #elif msa_ctx == False and msa_store:
+    #    print('msa store')
+    #    df_msa = pd.DataFrame.from_dict(msa_store)
 
-        if year_built_min and year_built_max:
-            df_msa = df_msa[(df_msa['Year Built'] >= int(year_built_min)) & (df_msa['Year Built'] <= int(year_built_max))]
+    else:
+        df_msa = pd.DataFrame({})
 
-        if num_units_min and num_units_max:
+    print("df_msa", df_msa.shape)
+
+    # Apply filters
+    if df_msa.shape[0] > 0:
+
+        if year_built_min and year_built_max or ctx.triggered_id in ["year-built-min", "year-built-max"]:
+            df_msa['Year_Built'] = df_msa['Year_Built'].astype(float).astype(int)
+            df_msa = df_msa[(df_msa['Year_Built'] >= int(year_built_min)) & (df_msa['Year_Built'] <= int(year_built_max))]
+
+        if num_units_min and num_units_max or ctx.triggered_id in ["num-units-min", "num-units-max"]:
+            df_msa['Size'] = df_msa['Size'].astype(float).astype(int)
             df_msa = df_msa[(df_msa['Size'] >= int(num_units_min)) & (df_msa['Size'] <= int(num_units_max))]
 
         # Generate Address string
-        addr_cols = ["Address", "City", "State", "Zip Code"]
+        df_msa['Zip_Code'] = df_msa['Zip_Code'].astype(float).astype(int)
+
+        addr_cols = ["Address", "City", "State", "Zip_Code"]
         df_msa['Address_Comp'] = df_msa[addr_cols].apply(lambda row: ' '.join(row.values.astype(str)), axis=1)
 
-        # Format Columns
-        df_msa['Occ.'] = df_msa['Occ.'].apply(clean_percent)
-
         # Filter by potential upside
+        df_msa['diff_potential'] = df_msa['diff_potential'].astype(float)
         df1 = df_msa[(df_msa['diff_potential'] >= 0) & (df_msa['diff_potential'] <= 80)]
 
         # Categorical potential upside
         df1['upside_cat'] = pd.cut(df1['diff_potential'], bins=[0, 10, 30, 80], labels=['Low', 'Medium', 'High'])
 
         # User upside filter
-        if upside_dropdown:
+        if upside_dropdown or ctx.triggered_id == "upside-deal":
             if upside_dropdown == "0-10":
                 df1 = df1[(df1['diff_potential'] >= 0) & (df1['diff_potential'] <= 9)]
             elif upside_dropdown == "10-30":
@@ -671,34 +748,50 @@ def update_map_deal(market, upside_dropdown, loan_dropdown, overlay, demo_dropdo
             elif upside_dropdown == "30+":
                 df1 = df1[(df1['diff_potential'] > 25)]
 
-        if loan_dropdown:
+        if loan_dropdown or ctx.triggered_id == "loan-deal":
             if loan_dropdown == "Performing":
-                df1 = df1[(df1['Loan Status'] == loan_dropdown)]
+                df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
             elif loan_dropdown == "Paid in full":
-                df1 = df1[(df1['Loan Status'] == loan_dropdown)]
+                df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
             elif loan_dropdown == "Loss":
-                df1 = df1[(df1['Loan Status'] == loan_dropdown)]
+                df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
             elif loan_dropdown == "Significant Loss":
-                df1 = df1[(df1['Loan Status'] == loan_dropdown)]
+                df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
             elif loan_dropdown == "Performing, Watchlisted":
-                df1 = df1[(df1['Loan Status'] == loan_dropdown)]
+                df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
             elif loan_dropdown == "Paid in full, Defeased":
-                df1 = df1[(df1['Loan Status'] == loan_dropdown)]
+                df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
             elif loan_dropdown == "Performing, Specially Serviced":
-                df1 = df1[(df1['Loan Status'] == loan_dropdown)]
+                df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
             elif loan_dropdown == "Defeased":
-                df1 = df1[(df1['Loan Status'] == loan_dropdown)]
+                df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
 
         # Format columns
-        df1['EstValue'] = df1['EstValue'].apply('${:,.0f}'.format)
-        df1['zrent_median'] = df1['zrent_median'].apply('${:,.0f}'.format)
-        df1['Preceding Fiscal Year Revenue'] = df1['Preceding Fiscal Year Revenue'].apply('${:,.0f}'.format)
+        df1['Zip_Code'] = df1['Zip_Code'].astype(float).apply('{:.0f}'.format)
+        df1['Size'] = df1['Size'].astype(float).apply('{:.0f}'.format)
+        df1['Year_Built'] = df1['Year_Built'].astype(float).apply('{:.0f}'.format)
+        df1['EstValue'] = df1['EstValue'].astype(float).apply('${:,.0f}'.format)
+        df1['zrent_median'] = df1['zrent_median'].astype(float).apply('${:.0f}'.format)
+        df1['Preceding_Fiscal_Year_Revenue'] = df1['Preceding_Fiscal_Year_Revenue'].astype(float).apply('${:,.0f}'.format)
+
+        df1['Preceding_Fiscal_Year_Operating_Expenses'] = df1['Preceding_Fiscal_Year_Operating_Expenses'].apply(clean_currency)
+        df1['Preceding_Fiscal_Year_Operating_Expenses'] = df1['Preceding_Fiscal_Year_Operating_Expenses'].astype(float).apply('${:,.0f}'.format)
+
+        df1['Most_Recent_Physical_Occupancy'] = df1['Most_Recent_Physical_Occupancy'].apply(clean_percent).astype(float).apply('{:.0f}%'.format)
+
+        df1['EstRentableArea'] = df1['EstRentableArea'].astype(float).apply('{:,.0f}'.format)
+
+        df1['lastSaleDate'] = pd.to_datetime(df1['lastSaleDate'], infer_datetime_format=True, errors="coerce")
+        df1['lastSaleDate'] = df1['lastSaleDate'].dt.strftime('%Y-%m-%d')
+
+        # Drop duplicates
+        df1.drop_duplicates(subset=['Property_Name','Zip_Code','Year_Built'], inplace=True)
 
         # Hover Info
-        propname = df1['Property Name']
+        propname = df1['Property_Name']
 
         # Columns for customdata
-        cd_cols = ['Property Name','Address_Comp','Zip Code','Size','Year Built','Property Type','zrent_quantile_random','zrent_median','Preceding Fiscal Year Revenue','Preceding Fiscal Year Operating Expenses','Occ.','EstRentableArea','EstValue','CapRate','Loan_Status','Deal_Type','Loan_Seller','PartyOwner1NameFull','lastSaleDate','lastSalePrice','upside_cat']
+        cd_cols = ['Property_Name','Address_Comp','Zip_Code','Size','Year_Built','Property_Type','zrent_quantile_random','zrent_median','Preceding_Fiscal_Year_Revenue','Preceding_Fiscal_Year_Operating_Expenses','Most_Recent_Physical_Occupancy','EstRentableArea','EstValue','Cap_Rate_Iss','Loan_Status','Deal_Type','Loan_Seller','PartyOwner1NameFull','lastSaleDate','lastSalePrice','upside_cat']
 
         datad.append({
 
@@ -706,7 +799,7 @@ def update_map_deal(market, upside_dropdown, loan_dropdown, overlay, demo_dropdo
                         "lat": df1['Lat'],
                         "lon": df1['Long'],
                         "name": "Location",
-                        "hovertext": propname,
+                        "hovertext": df1['Property_Name'],
                         "showlegend": False,
                         "hoverinfo": "text",
                         "mode": "markers",
@@ -736,39 +829,17 @@ def update_map_deal(market, upside_dropdown, loan_dropdown, overlay, demo_dropdo
                      }
         )
 
-    elif market and show_properties_nclicks <= 0 and df_geo.shape[0] > 0:
-
-        datad.append({
-
-                        "type": "scattermapbox",
-                        "lat": coords[0],
-                        "lon": coords[1],
-                        "name": "Location",
-                        "hovertext": "",
-                        "showlegend": False,
-                        "hoverinfo": "text",
-                        "mode": "markers",
-                        "clickmode": "event+select",
-                        "marker": {
-                            "symbol": "circle",
-                            "size": 9,
-                            "opacity": 0.8
-                            }
-                     }
-        )
-
-
 
     # Choroplethmapbox
-    if demo_dropdown is not None and demo_dropdown != "" and gdf.shape[0] > 0:
+    if demo_dropdown is not None and demo_dropdown != "" and market is not None and market in Market_List:
 
         geo_level = None
-
-        df_geo_sub = gdf[gdf['MSA'] == market]
 
         if mapdata is not None:
 
             if len(mapdata) > 1 and 'mapbox.center' in mapdata and 'mapbox.zoom' in mapdata:
+
+                print('demo dd mapdata', mapdata)
 
                 # set coords
                 coords[0] = mapdata['mapbox.center']['lat']
@@ -778,109 +849,287 @@ def update_map_deal(market, upside_dropdown, loan_dropdown, overlay, demo_dropdo
                 zoom = mapdata['mapbox.zoom']
 
         if demo_dropdown == "RentGrowth":
-            # Query rental growth data
-            query = '''
 
-                    select MsaName, zip_code, AVG(pct_change) AS avg_rent_growth, ST_AsText(geometry) as geom
-                    from stroom_main.gdf_rent_growth_july
-                    GROUP BY MsaName, zip_code, geometry
-                    HAVING st_distance_sphere(Point({},{}), ST_Centroid(geometry)) <= {};
+            if ctx.triggered[0]['value'] == 'RentGrowth':
+                # Query rental growth data
+                query = '''
+                        select MsaName, zip_code, AVG(pct_change) AS avg_rent_growth, ST_AsText(geometry) as geom
+                        from stroom_main.gdf_rent_growth_july
+                        GROUP BY MsaName, zip_code, geometry
+                        HAVING st_distance_sphere(Point({},{}), ST_Centroid(geometry)) <= {};
+                        '''.format(coords[1], coords[0], 1609*25)
 
-                    '''.format(coords[1], coords[0], 1609*25)
+                # To pandas
+                df_rg = pd.read_sql(query, con)
 
-            # To panads
-            df_rg = pd.read_sql(query, con)
+                df_rg['avg_rent_growth'] = round(df_rg['avg_rent_growth']*100,2)
 
-            # To GeoPandas
-            df_rg['geom'] = gpd.GeoSeries.from_wkt(df_rg['geom'])
-            gdf_rg = gpd.GeoDataFrame(df_rg, geometry='geom')
+            # Read from local memory / storage
+            elif rg_store is not None:
 
-            gdf_rg['avg_rent_growth'] = round(gdf_rg['avg_rent_growth']*100,2)
-            s = gdf_rg['avg_rent_growth'].astype(float)
-            label = "Rent Growth (YoY)"
+                df_rg = pd.DataFrame.from_dict(rg_store['RentGrowth'])
 
-            geo_level = "zip"
-            cscale = "Portland"
+            else:
+                df_rg = pd.DataFrame({})
+
+            if df_rg.shape[0] > 0:
+                # To GeoPandas
+                df_rg['geom'] = gpd.GeoSeries.from_wkt(df_rg['geom'])
+                gdf_rg = gpd.GeoDataFrame(df_rg, geometry='geom')
+
+                s = gdf_rg['avg_rent_growth'].astype(float)
+                label = "Rent Growth (% YoY)"
+
+                geo_level = "zip"
+                cscale = "Portland"
 
         # Volatility Index
-        if demo_dropdown == "Volatility":
-            # Query rental growth data
+        elif demo_dropdown == "Volatility":
+
+            if ctx.triggered[0]['value'] == 'Volatility':
+                # Query rental growth data
+                query = '''
+                        select MsaName, zip_code, STD(pct_change) AS std_rent_growth, ST_AsText(geometry) as geom
+                        from stroom_main.gdf_rent_growth_july
+                        GROUP BY MsaName, zip_code, geometry
+                        HAVING st_distance_sphere(Point({},{}), ST_Centroid(geometry)) <= {};
+                        '''.format(coords[1], coords[0], 1609*25)
+
+                # To panads
+                df_rg = pd.read_sql(query, con)
+
+                df_rg['std_rent_growth'] = round(df_rg['std_rent_growth']*100,2)
+
+            elif rg_store is not None:
+
+                df_rg = pd.DataFrame.from_dict(rg_store['Volatility'])
+
+            else:
+
+                df_rg = pd.DataFrame({})
+
+            if df_rg.shape[0] > 0:
+                # To GeoPandas
+                df_rg['geom'] = gpd.GeoSeries.from_wkt(df_rg['geom'])
+                gdf_rg = gpd.GeoDataFrame(df_rg, geometry='geom')
+
+                s = gdf_rg['std_rent_growth'].astype(float)
+                label = "Volatility"
+
+                geo_level = "zip"
+                cscale = "Portland"
+
+        elif demo_dropdown == "Home":
+
             query = '''
+                    select Median_Home_Value_2019, tract_geom, tract_ce, lsad_name
+                    from stroom_main.usgeodata_july_v1
+                    where MSA IN ('{}')
+                    '''.format(market)
 
-                    select MsaName, zip_code, STD(pct_change) AS std_rent_growth, ST_AsText(geometry) as geom
-                    from stroom_main.gdf_rent_growth_july
-                    GROUP BY MsaName, zip_code, geometry
-                    HAVING st_distance_sphere(Point({},{}), ST_Centroid(geometry)) <= {};
+            dfc = pd.read_sql(query, con)
+            dfc =  dfc[dfc['tract_geom'].notna()]
 
-                    '''.format(coords[1], coords[0], 1609*25)
+            dfc['tract_geom'] = dfc.tract_geom.apply(valid_geoms)
+            dfc = dfc[dfc['tract_geom'].notna()]
 
-            # To panads
-            df_rg = pd.read_sql(query, con)
+            # Convert to GeoDataFrame
+            gdfc = gpd.GeoDataFrame(dfc, geometry='tract_geom', crs='epsg:4326')
 
-            # To GeoPandas
-            df_rg['geom'] = gpd.GeoSeries.from_wkt(df_rg['geom'])
-            gdf_rg = gpd.GeoDataFrame(df_rg, geometry='geom')
-
-            gdf_rg['std_rent_growth'] = round(gdf_rg['std_rent_growth']*100,2)
-            s = gdf_rg['std_rent_growth'].astype(float)
-            label = "Volatility"
-
-            geo_level = "zip"
-            cscale = "Portland"
-
-        if demo_dropdown == "Home":
-            df = df_geo_sub[df_geo_sub['Median_Home_Value'] > 0]
-            s = df['Median_Home_Value'].astype(float)
+            gdfc['Median_Home_Value_2019'] = gdfc['Median_Home_Value_2019'].astype(float)
+            gdfc = gdfc[gdfc['Median_Home_Value_2019'] > 100000]
+            s = gdfc['Median_Home_Value_2019']
             label = "Median Home Value"
             geo_level = "census"
 
+
         elif demo_dropdown == "Pop":
-            s = df_geo_sub['Population'].astype(float)
+
+            query = '''
+                    select Population_2019, tract_geom, tract_ce, lsad_name
+                    from stroom_main.usgeodata_july_v1
+                    where MSA IN ('{}');
+                    '''.format(market)
+
+            dfc = pd.read_sql(query, con)
+            dfc =  dfc[dfc['tract_geom'].notna()]
+
+            dfc['tract_geom'] = dfc.tract_geom.apply(valid_geoms)
+            dfc = dfc[dfc['tract_geom'].notna()]
+
+            # Convert to GeoDataFrame
+            gdfc = gpd.GeoDataFrame(dfc, geometry='tract_geom', crs='epsg:4326')
+
+            gdfc['Population_2019'] = gdfc['Population_2019'].astype(float)
+            gdfc = gdfc[gdfc['Population_2019'] > 0]
+            s = gdfc['Population_2019']
             label = "Population"
             geo_level = "census"
 
         elif demo_dropdown == "Income":
-            df = df_geo_sub[df_geo_sub['Median_HH_Income'] > 0]
-            s = df['Median_HH_Income'].astype(float)
+
+            query = '''
+                    select Median_HH_Income_2019, tract_geom, tract_ce, lsad_name
+                    from stroom_main.usgeodata_july_v1
+                    where MSA IN ('{}');
+                    '''.format(market)
+
+            dfc = pd.read_sql(query, con)
+            dfc =  dfc[dfc['tract_geom'].notna()]
+
+            dfc['tract_geom'] = dfc.tract_geom.apply(valid_geoms)
+            dfc = dfc[dfc['tract_geom'].notna()]
+
+            # Convert to GeoDataFrame
+            gdfc = gpd.GeoDataFrame(dfc, geometry='tract_geom', crs='epsg:4326')
+
+            gdfc['Median_HH_Income_2019'] = gdfc['Median_HH_Income_2019'].astype(float)
+            gdfc = gdfc[gdfc['Median_HH_Income_2019'] > 25000]
+            s = gdfc['Median_HH_Income_2019']
             label = "Median Income"
             geo_level = "census"
 
+
         elif demo_dropdown == "Income-change":
-            df = df_geo_sub[(df_geo_sub['median_hh_income_percent_change'] > 0) & (df_geo_sub['median_hh_income_percent_change'] < 100)]
-            s = df['median_hh_income_percent_change'].astype(float)
-            label = "Income Change"
+
+            query = '''
+                    select median_hh_income_percent_change, tract_geom, tract_ce, lsad_name
+                    from stroom_main.usgeodata_july_v1
+                    where MSA IN ('{}');
+                    '''.format(market)
+
+            dfc = pd.read_sql(query, con)
+            dfc =  dfc[dfc['tract_geom'].notna()]
+
+            dfc['tract_geom'] = dfc.tract_geom.apply(valid_geoms)
+            dfc = dfc[dfc['tract_geom'].notna()]
+
+            # Convert to GeoDataFrame
+            gdfc = gpd.GeoDataFrame(dfc, geometry='tract_geom', crs='epsg:4326')
+
+            gdfc['median_hh_income_percent_change'] = gdfc['median_hh_income_percent_change'].astype(float)
+            gdfc = gdfc[(gdfc['median_hh_income_percent_change'] > -20) & (gdfc['median_hh_income_percent_change'] < 100)]
+            s = gdfc['median_hh_income_percent_change']
+            label = "Income Change (%)"
             geo_level = "census"
 
+
         elif demo_dropdown == "Pop-change":
-            df = df_geo_sub[(df_geo_sub['population_percent_change'] > 0) & (df_geo_sub['population_percent_change'] < 100)]
-            s = df['population_percent_change'].astype(float)
-            label = "Population Change"
+
+            query = '''
+                    select population_percent_change, tract_geom, tract_ce, lsad_name
+                    from stroom_main.usgeodata_july_v1
+                    where MSA IN ('{}');
+                    '''.format(market)
+
+            dfc = pd.read_sql(query, con)
+            dfc =  dfc[dfc['tract_geom'].notna()]
+
+            dfc['tract_geom'] = dfc.tract_geom.apply(valid_geoms)
+            dfc = dfc[dfc['tract_geom'].notna()]
+
+            # Convert to GeoDataFrame
+            gdfc = gpd.GeoDataFrame(dfc, geometry='tract_geom', crs='epsg:4326')
+
+            gdfc['population_percent_change'] = gdfc['population_percent_change'].astype(float)
+            gdfc = gdfc[(gdfc['population_percent_change'] > -20) & (gdfc['population_percent_change'] < 100)]
+            s = gdfc['population_percent_change']
+            label = "Population Change (%)"
             geo_level = "census"
 
         elif demo_dropdown == "Home-value-change":
-            df = df_geo_sub[(df_geo_sub['median_home_value_percent_change'] > 0) & (df_geo_sub['median_home_value_percent_change'] < 100)]
-            s = df['median_home_value_percent_change'].astype(float)
-            label = "Home Value Change"
+
+            query = '''
+                    select median_home_value_percent_change, tract_geom, tract_ce, lsad_name
+                    from stroom_main.usgeodata_july_v1
+                    where MSA IN ('{}');
+                    '''.format(market)
+
+            dfc = pd.read_sql(query, con)
+            dfc =  dfc[dfc['tract_geom'].notna()]
+
+            dfc['tract_geom'] = dfc.tract_geom.apply(valid_geoms)
+            dfc = dfc[dfc['tract_geom'].notna()]
+
+            # Convert to GeoDataFrame
+            gdfc = gpd.GeoDataFrame(dfc, geometry='tract_geom', crs='epsg:4326')
+
+            gdfc['median_home_value_percent_change'] = gdfc['median_home_value_percent_change'].astype(float)
+            gdfc = gdfc[(gdfc['median_home_value_percent_change'] > -20) & (gdfc['median_home_value_percent_change'] < 100)]
+            s = gdfc['median_home_value_percent_change']
+            label = "Home Value Change (%)"
             geo_level = "census"
 
         elif demo_dropdown == "Price_Rent_Ratio":
-            df = df_geo_sub[(df_geo_sub['price_rent_ratio'] > 0) & (df_geo_sub['price_rent_ratio'] < 80)]
-            s = df['price_rent_ratio'].astype(float)
+
+            query = '''
+                    select (Median_Home_Value_2019)/((zrent_median)*12) as price_rent_ratio, tract_geom, tract_ce, lsad_name
+                    from stroom_main.usgeodata_july_v1
+                    where MSA IN ('{}');
+                    '''.format(market)
+
+            dfc = pd.read_sql(query, con)
+            dfc =  dfc[dfc['tract_geom'].notna()]
+
+            dfc['tract_geom'] = dfc.tract_geom.apply(valid_geoms)
+            dfc = dfc[dfc['tract_geom'].notna()]
+
+            # Convert to GeoDataFrame
+            gdfc = gpd.GeoDataFrame(dfc, geometry='tract_geom', crs='epsg:4326')
+
+            gdfc['price_rent_ratio'] = gdfc['price_rent_ratio'].astype(float)
+            gdfc = gdfc[(gdfc['price_rent_ratio'] > 0) & (gdfc['price_rent_ratio'] < 80)]
+            s = gdfc['price_rent_ratio']
             label = "Price to Rent Ratio"
             geo_level = "census"
 
         elif demo_dropdown == "Bachelor":
-            df = df_geo_sub[df_geo_sub['Bachelor\'s Degree'] > 0]
-            s = df['Bachelor\'s Degree'].astype(float)
+
+            query = '''
+                    select Bachelors_Degree_2019, tract_geom, tract_ce, lsad_name
+                    from stroom_main.usgeodata_july_v1
+                    where MSA IN ('{}');
+                    '''.format(market)
+
+            dfc = pd.read_sql(query, con)
+            dfc =  dfc[dfc['tract_geom'].notna()]
+
+            dfc['tract_geom'] = dfc.tract_geom.apply(valid_geoms)
+            dfc = dfc[dfc['tract_geom'].notna()]
+
+            # Convert to GeoDataFrame
+            gdfc = gpd.GeoDataFrame(dfc, geometry='tract_geom', crs='epsg:4326')
+
+            gdfc['Bachelors_Degree_2019'] = gdfc['Bachelors_Degree_2019'].astype(float)
+            gdfc = gdfc[gdfc['Bachelors_Degree_2019'] > 100]
+            s = gdfc['Bachelors_Degree_2019']
             label = "Bachelor\'s Degree"
             geo_level = "census"
 
         elif demo_dropdown == "Graduate":
-            df = df_geo_sub[df_geo_sub['Graduate or Professional Degree'] > 0]
-            s = df['Graduate or Professional Degree'].astype(float)
+
+            query = '''
+                    select Graduate_Degree_2019, tract_geom, tract_ce, lsad_name
+                    from stroom_main.usgeodata_july_v1
+                    where MSA IN ('{}');
+                    '''.format(market)
+
+            dfc = pd.read_sql(query, con)
+            dfc =  dfc[dfc['tract_geom'].notna()]
+
+            dfc['tract_geom'] = dfc.tract_geom.apply(valid_geoms)
+            dfc = dfc[dfc['tract_geom'].notna()]
+
+            # Convert to GeoDataFrame
+            gdfc = gpd.GeoDataFrame(dfc, geometry='tract_geom', crs='epsg:4326')
+
+            gdfc['Graduate_Degree_2019'] = gdfc['Graduate_Degree_2019'].astype(float)
+            gdfc = gdfc[gdfc['Graduate_Degree_2019'] > 0]
+            s = gdfc['Graduate_Degree_2019']
             label = "Graduate Degree"
             geo_level = "census"
 
+        # Clear scattermapbox - properties layer
         if not overlay:
             datad.clear()
 
@@ -889,18 +1138,18 @@ def update_map_deal(market, upside_dropdown, loan_dropdown, overlay, demo_dropdo
             datad.append({
 
                             "type": "choroplethmapbox",
-                            "geojson": geo_json,
-                            "locations": df_geo_sub['tract'],
+                            "geojson": gdfc.__geo_interface__,
+                            "locations": gdfc['tract_ce'],
                             "z": s,
-                            "featureidkey": "properties.tract",
-                            "hovertext": df_geo_sub['Census_name'],
+                            "featureidkey": "properties.tract_ce",
+                            "hovertext": gdfc['lsad_name'],
                             "autocolorscale":False,
                             "colorscale":"Portland",
                             "colorbar":dict(
                                             title = dict(text=label,
                                                          font=dict(size=12)
                                                         ),
-                                            orientation = 'h',
+                                            orientation = 'v',
                                             x= -0.15,
                                             xanchor= "left",
                                             y= 0,
@@ -914,6 +1163,7 @@ def update_map_deal(market, upside_dropdown, loan_dropdown, overlay, demo_dropdo
                                            ),
                             "zmin": s.min(),
                             "zmax": s.max(),
+                            "marker": dict(opacity = 0.6),
                             "marker_line_width": 0,
                             "opacity": 0.2,
                             "labels": label,
@@ -938,7 +1188,7 @@ def update_map_deal(market, upside_dropdown, loan_dropdown, overlay, demo_dropdo
                                             title = dict(text=label,
                                                          font=dict(size=12)
                                                         ),
-                                            orientation = 'h',
+                                            orientation = 'v',
                                             x= -0.15,
                                             xanchor= "left",
                                             y= 0,
@@ -951,6 +1201,7 @@ def update_map_deal(market, upside_dropdown, loan_dropdown, overlay, demo_dropdo
                                            ),
                             "zmin": s.min(),
                             "zmax": s.max(),
+                            "marker": dict(opacity = 0.6),
                             "marker_line_width": 0,
                             "opacity": 0.2,
                             "labels": label,
@@ -960,7 +1211,7 @@ def update_map_deal(market, upside_dropdown, loan_dropdown, overlay, demo_dropdo
             )
 
     # Location data layer
-    if loc_dropdown is not None and loc_dropdown != "":
+    if loc_dropdown is not None and market is not None and loc_dropdown != "" or ctx.triggered_id == "location-deal" and loc_dropdown is not None and loc_dropdown != "":
 
         zoom = 12
 
@@ -1017,7 +1268,7 @@ def update_map_deal(market, upside_dropdown, loan_dropdown, overlay, demo_dropdo
                    typ = sym_dict.get(i)
                    sym_list.append(typ)
 
-
+               print("datad loc dd")
                datad.append({
 
                               "type": "scattermapbox",
@@ -1032,16 +1283,15 @@ def update_map_deal(market, upside_dropdown, loan_dropdown, overlay, demo_dropdo
                               "marker": {
                                          "symbol": sym_list,
                                          "size": 15,
-                                         "opacity": 0.7,
+                                         "opacity": 0.6,
                                          "color": "blue"
                                         }
                               }
                )
 
-
     layout = {
 
-                 "autosize": True,
+                 "autosize": False,
                  "hovermode": "closest",
                  "mapbox": {
 
@@ -1067,23 +1317,53 @@ def update_map_deal(market, upside_dropdown, loan_dropdown, overlay, demo_dropdo
 
     }
 
-    # Rearrange so that scattermapbox is top layer
     if len(datad) > 0:
 
-        if datad[0]['type'] == 'scattermapbox':
-            datad.append(datad.pop(datad.index(datad[0])))
+        # If clear properties - eject scattermapbox property layer
+        # if clear_properties_nclicks > 0:
+        #     for d in datad:
+        #         if d['type'] == 'scattermapbox':
+        #             datad.remove(d)
 
-        if show_properties_nclicks > 0 and market is not None and market != "":
-            return ({"data": datad, "layout": layout}, df1.to_dict("records"))
+        # Rearrange so that scattermapbox is top layer
+        for i in range(len(datad)):
+            if datad[i]['type'] == 'scattermapbox':
+                datad.append(datad.pop(datad.index(datad[i])))
 
-        elif demo_dropdown != "" or loc_dropdown != "":
-            return ({"data": datad, "layout": layout}, no_update)
+        if market is not None and df_msa.shape[0] > 0 and demo_dropdown is None and loc_dropdown is None:
+            print('return case #1 - market selected, show properties')
 
-        elif market and show_properties_nclicks <= 0:
-            return ({"data": datad, "layout": layout}, no_update)
+            return ({"data": datad, "layout": layout}, df1.to_dict("records"), "Property Count:{}".format(df1.shape[0]), df_msa.to_dict('records'), no_update)
+
+        elif market is not None and market in Market_List and demo_dropdown is not None:
+            print('return case #2 - market selected and demo dropdown')
+
+            demo_store = no_update
+
+            if demo_dropdown in ['RentGrowth', 'Volatility']:
+                # Polygon to strings
+                df_rg['geom'] = df_rg.geom.apply(lambda x: wkt.dumps(x))
+
+                demo_store = {demo_dropdown : df_rg.to_dict("records")}
+            else:
+                demo_store = no_update
+
+            return ({"data": datad, "layout": layout}, df1.to_dict("records"), "Property Count: {}".format(df1.shape[0]), df_msa.to_dict("records"), demo_store)
+
+        elif market is not None and market in Market_List and loc_dropdown is not None:
+            print('return case #3 - market selected and location dropdown')
+            return ({"data": datad, "layout": layout}, no_update, no_update, no_update, no_update)
+
+    elif len(data_def) > 0 and market is None:
+        print('return case #4 - data default')
+        datad.clear()
+        return ({"data": data_def, "layout": layout}, no_update, "Property Count: {}".format(0), no_update, no_update)
 
     else:
-        return ({"data": data_def, "layout": layout}, no_update)
+        print('return case #5 - final else')
+        datad.clear()
+        return ({"data": data_def, "layout": layout}, no_update, "Property Count: {}".format(0), no_update, no_update)
+
 
 
 # Reset dropdowns upon market change OR clerance
@@ -1115,33 +1395,21 @@ def update_map_deal(market, upside_dropdown, loan_dropdown, overlay, demo_dropdo
 
                         ],
                         [
-                            Input("market-deal", "value"),
-                            Input("show-properties-button", "n_clicks")
+                            Input("market-deal", "value")
+                            #Input("show-properties-button", "n_clicks")
                         ],
                      )
-def reset_selections(market, show_properties_nclicks):
+def reset_selections(market):
+
+    ctx = dash.callback_context
+
+    print('reset selections callback')
 
     # Disable filters until market is selected
-    if market == '' or market is None:
+    if market is None or ctx.triggered_id == "market-deal" and ctx.triggered[0]['value'] == '':
         return ("", True, "", True, "", "", True, "", True, "", True, "", True, "", True, "", True)
     else:
         return (no_update, False, no_update, False, no_update, no_update, False, no_update, False, no_update, False, no_update, False, no_update, False, no_update, False)
-
-
-    # check for triggered inputs / states
-    ctx = dash.callback_context
-
-    for i in range(len(ctx.triggered)):
-
-        # Reset show properties button click if clicked
-        if ctx.triggered[i]['prop_id'] == 'show-properties-button.n_clicks' and ctx.triggered[i]['value'] != '' and ctx.triggered[i]['value'] > 0:
-            show_properties_nclicks = int(ctx.triggered[i]['value']) - int(ctx.triggered[i]['value'])
-
-        # Market cleared and or changed
-        if ctx.triggered[i]['prop_id'] == 'market-deal.value' and ctx.triggered[i]['value'] == '':
-            return ("", True, "", True, "", "", True, "", True, "", True, "", True, "", True, "", True)
-        else:
-            return (no_update, False, no_update, False, no_update, no_update, False, no_update, False, no_update, False, no_update, False, no_update, False, no_update, False)
 
 
 
@@ -1185,12 +1453,13 @@ def reset_selections(market, show_properties_nclicks):
                           ],
 
                           [
-                                State("modal-1-deal", "is_open")
+                                State("modal-1-deal", "is_open"),
+                                State("msa-prop-store", "data")
                           ],
                     )
-def display_popup2(clickData, n_clicks, is_open):
+def display_popup2(clickData, n_clicks, is_open, msa_store):
 
-    if clickData:
+    if clickData and "customdata" in clickData["points"][0]:
 
         res = json.dumps(clickData, indent=2)
 
@@ -1239,17 +1508,25 @@ def display_popup2(clickData, n_clicks, is_open):
         lastSalePrice = clickData["points"][0]["customdata"][19]
         upsideCat = clickData["points"][0]["customdata"][20]
 
-        # Construct a list of dictionaries
-        # Filter Pandas DataFrame
-        df = gdf[gdf['Property Name'] == Name]
+        # Dictionary to pandas DataFrame
+        if msa_store:
+            df_msa = pd.DataFrame.from_dict(msa_store)
+            print("df msa", df_msa.shape)
 
-        index = df.index[0]
-        img_dict = df['Image_dicts'][index]
+            # Construct a list of dictionaries
+            # Filter Pandas DataFrame
+            df = df_msa[df_msa['Property_Name'] == Name]
+
+            index = df.index[0]
+            img_dict = df['Image_dicts'][index]
+        else:
+            img_dict = 0
+
 
         # Construct carousel object
         try:
 
-            if type(img_dict) is str:
+            if type(img_dict) is str and img_dict != "0":
 
                 img_dict = ast.literal_eval(img_dict)
 
@@ -1301,12 +1578,19 @@ def display_popup2(clickData, n_clicks, is_open):
                            )
 
         except Exception as e:
-            print(e)
+            print('Exception', e)
+            url = create_presigned_url('gmaps-images-6771', 'property_images/no_imagery.png')
 
+            carousel = dbc.Carousel(
+                                    items=[
+                                            {"key": "1", "src": url, "img_style": {"width": "300px", "height": "300px"}},
+                                    ],
+                                    controls=False,
+                                    indicators=False,
+                        )
 
         # Formatted Rent for default view (NA) and calculated / post button click and handling of None values
-
-        if upsideCat is None or upsideCat == '':
+        if upsideCat in ["null", None, 0, "0", 0.0, "0.0"]:
             upsideCat_src = no_update
             upsideCat_txt = no_update
         elif upsideCat == "High":
@@ -1314,80 +1598,97 @@ def display_popup2(clickData, n_clicks, is_open):
             upsideCat_txt = "High Upside Potential (> 25%+)"
         elif upsideCat == "Medium":
             upsideCat_src = "https://stroom-images.s3.us-west-1.amazonaws.com/average_chart.png"
-            upsideCat_txt = "Average. Upside Potential (10% - 25%)"
+            upsideCat_txt = "Medium Upside Potential (10% - 25%)"
         elif upsideCat == "Low":
             upsideCat_src = "https://stroom-images.s3.us-west-1.amazonaws.com/low-growth.png"
             upsideCat_txt = "Low Upside Potential (< 10%)"
 
-        if Revenue is None:
+        if Built in ["null", None, 0, "0", 0.0, "0.0"]:
+            Built_fmt = "N/A"
+        else:
+            Built_fmt = Built
+
+        if Revenue in ["null", None, 0, "0", 0.0, "0.0"]:
             Revenue_fmt = "N/A"
         else:
             Revenue = clean_currency(Revenue)
             Revenue_fmt = "${:,.0f}".format(float(Revenue))
 
-        if Opex is None:
+        if Opex in ["null", None, 0, "0", 0.0, "0.0"]:
             Opex_fmt = "N/A"
         else:
             Opex = clean_currency(Opex)
             Opex_fmt = "${:,.0f}".format(float(Opex))
 
-        if Occupancy is None:
+        if Occupancy in ["null", None, 0, "0", 0.0, "0.0", "0%", "0.0%"]:
             Occupancy_fmt = "N/A"
         else:
+            Occupancy = clean_percent(Occupancy)
             Occupancy = float(Occupancy)
             Occupancy_fmt = "{:.0f}%".format(Occupancy)
 
-        if RentArea is None:
+        if RentArea in ["null", None, 0, "0", 0.0, "0.0"]:
             RentArea_fmt = "N/A"
         else:
-            RentArea_fmt = "{:,.0f} sq.ft".format(RentArea)
+            RentArea = RentArea.replace(',','')
+            RentArea_fmt = "{:,.0f} sq.ft".format(float(RentArea))
 
-        if AssessedValue is None:
+        if AssessedValue in ["null", None, 0, "0", 0.0, "0.0"]:
             AssessedValue_fmt = "N/A"
         elif type(AssessedValue) != str:
             AssessedValue_fmt = "${:,.0f}".format(AssessedValue)
         else:
             AssessedValue_fmt = AssessedValue
 
-        if CapRate is None or CapRate == "null":
+        if CapRate in ["null", None, 0, "0", 0.0, "0.0"]:
             CapRate_fmt = "N/A"
         elif type(CapRate) != str:
             CapRate = CapRate * 100
             CapRate_fmt = "{:,.2f}%".format(CapRate)
+        elif type(CapRate) == str:
+            CapRate = float(CapRate) * 100
+            CapRate_fmt = "{:,.2f}%".format(CapRate)
         else:
             CapRate_fmt = CapRate
 
-        if LoanStatus == "null" or LoanStatus is None:
+        if LoanStatus in ["null", None, 0, "0", 0.0, "0.0"]:
             LoanStatus_fmt = "N/A"
         else:
             LoanStatus_fmt = LoanStatus
 
-        if DealType == "null" or DealType is None:
+        if DealType in ["null", None, 0, "0", 0.0, "0.0"]:
             DealType_fmt = "N/A"
         else:
             DealType_fmt = DealType
 
-        if LoanSeller == "null" or LoanSeller is None:
+        if LoanSeller in ["null", None, 0, "0", 0.0, "0.0"]:
             LoanSeller_fmt = "N/A"
         else:
             LoanSeller_fmt = LoanSeller
 
-        if OwnerInfo == "null" or OwnerInfo is None:
+        if OwnerInfo in ["null", None, 0, "0", 0.0, "0.0"]:
             OwnerInfo_fmt = "N/A"
         else:
             OwnerInfo_fmt = OwnerInfo
 
-        if lastSaleDate == "null" or lastSaleDate is None:
+        if lastSaleDate in ["null", None, 0, "0", 0.0, "0.0"]:
             lastSaleDate_fmt = "N/A"
         else:
-            lastSaleDate_fmt = lastSaleDate
+            lastSaleDate_fmt = lastSaleDate.split(' ')[0]
 
-        if lastSalePrice == "null" or lastSalePrice is None or lastSalePrice <= 100000:
+        if lastSalePrice in ["null", None, 0, "0", 0.0, "0.0"]:
             lastSalePrice_fmt = "N/A"
+        elif isinstance(lastSalePrice, str) == True:
+            lastSalePrice =  float(lastSalePrice)
+            # Bad SalePrice
+            if lastSalePrice <= 100000:
+                lastSalePrice_fmt = "N/A"
+            else:
+                lastSalePrice_fmt = "${:,.0f}".format(lastSalePrice)
         else:
-            lastSalePrice_fmt = "${:,.0f}".format(lastSalePrice)
+            lastSalePrice_fmt = "N/A"
 
-        return(not is_open, carousel, upsideCat_txt, upsideCat_src, Name, Address, Size, Built, Property, Rents_fmt, Revenue_fmt, Opex_fmt, Occupancy_fmt, RentArea_fmt, AssessedValue_fmt, CapRate_fmt, LoanStatus_fmt, DealType_fmt, LoanSeller_fmt, OwnerInfo_fmt, lastSaleDate_fmt, lastSalePrice_fmt)
+        return(not is_open, carousel, upsideCat_txt, upsideCat_src, Name, Address, Size, Built_fmt, Property, Rents_fmt, Revenue_fmt, Opex_fmt, Occupancy_fmt, RentArea_fmt, AssessedValue_fmt, CapRate_fmt, LoanStatus_fmt, DealType_fmt, LoanSeller_fmt, OwnerInfo_fmt, lastSaleDate_fmt, lastSalePrice_fmt)
 
     elif n_clicks:
         print('ok modal')
@@ -1398,12 +1699,12 @@ def display_popup2(clickData, n_clicks, is_open):
 
 # Storage component
 @application.callback(Output("modal-store","data"),
-                     [
-                        Input("map-deal","clickData"),
-                        Input("returns_btn","n_clicks")
-                     ]
-                    )
-def modal_returns_click(clickData, n_clicks):
+                      [
+                        Input("map-deal","clickData")
+                        #Input("returns_btn","n_clicks")
+                      ]
+                     )
+def modal_returns_click(clickData):
 
     if clickData:
 

@@ -101,7 +101,7 @@ layout = html.Div([
 
                        # Rent Growth
                        dbc.Label("Rent Growth Yr.: ", style={"font-size" : "100%", "margin-right": "4px"}),
-                       dbc.InputGroupAddon("Min", style={"height":"max-content","margin-left":"4px"}),
+                       dbc.InputGroupText("Min", style={"height":"max-content","margin-left":"4px"}),
                        dbc.Input(
                                  id="rent-min",
                                  type="number",
@@ -111,7 +111,7 @@ layout = html.Div([
                                  style={"height":"auto"}
                                 ),
 
-                       dbc.InputGroupAddon("Max", style={"height":"max-content","margin-left":"4px"}),
+                       dbc.InputGroupText("Max", style={"height":"max-content","margin-left":"4px"}),
                        dbc.Input(
                                  id="rent-max",
                                  type="number",
@@ -129,7 +129,7 @@ layout = html.Div([
 
                         dbc.Label("Operating Expenses (Monthly): ", style={"font-size" : "100%", "margin-right": "4px"}),
 
-                        dbc.InputGroupAddon("OPEX", style={"height":"max-content"}),
+                        dbc.InputGroupText("OPEX", style={"height":"max-content"}),
                         dbc.Input(
                                   id="op-exp-return",
                                   persistence=True,
@@ -137,7 +137,7 @@ layout = html.Div([
                                   style={"height":"auto"}
                                  ),
 
-                        dbc.InputGroupAddon("Taxes", style={"height":"max-content"}),
+                        dbc.InputGroupText("Taxes", style={"height":"max-content"}),
                         dbc.Input(
                                   id="tax-return",
                                   persistence=True,
@@ -162,7 +162,7 @@ layout = html.Div([
                                 id="opex-tooltip"
                          ),
 
-                         dbc.InputGroupAddon("Min", style={"height":"max-content","margin-left":"4px"}),
+                         dbc.InputGroupText("Min", style={"height":"max-content","margin-left":"4px"}),
                          dbc.Input(
                                    id="opex-min",
                                    type="number",
@@ -172,7 +172,7 @@ layout = html.Div([
                                    style={"height":"auto"}
                                   ),
 
-                         dbc.InputGroupAddon("Max", style={"height":"max-content","margin-left":"4px"}),
+                         dbc.InputGroupText("Max", style={"height":"max-content","margin-left":"4px"}),
                          dbc.Input(
                                    id="opex-max",
                                    type="number",
@@ -202,7 +202,7 @@ layout = html.Div([
                                     id="disc-tooltip"
                              ),
 
-                             dbc.InputGroupAddon("Calc. (%)", style={"height":"max-content","margin-left":"4px"}),
+                             dbc.InputGroupText("Calc. (%)", style={"height":"max-content","margin-left":"4px"}),
                              dbc.Input(
                                        id="disc-rate",
                                        value = 8,
@@ -213,7 +213,7 @@ layout = html.Div([
 
 
                             # Valuation
-                            dbc.InputGroupAddon("Hold", style={"height":"max-content"}),
+                            dbc.InputGroupText("Hold", style={"height":"max-content"}),
                             dbc.Input(
                                       id = "hold-return",
                                       type = "text",

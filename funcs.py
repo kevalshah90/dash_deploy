@@ -12,6 +12,7 @@ import geopandas as gpd
 import pygeohash as gh
 from geolib import geohash
 import pygeodesy as pgd
+import shapely
 from shapely.wkt import loads
 import http.client
 import urllib.parse
@@ -103,6 +104,9 @@ def str_num(x):
 # Get Lat, Long
 def get_geocodes(address):
 
+    # US bbox
+    bbox = [-171.791110603, 18.91619, -66.96466, 71.3577635769]
+
     try:
 
         g = geocoder.mapbox(address, key=token)
@@ -117,6 +121,8 @@ def get_geocodes(address):
 
     except Exception as e:
         print("Exception", e)
+
+        #bbox = {'northeast': {'lat': 18.91619, 'lng': -171.791110603}, 'southwest': {'lat': 71.3577635769, 'lng': -66.96466}}
 
         # API Call
         result = gmaps.geocode(address)
@@ -315,9 +321,23 @@ def streetview(lat, long, identifier):
             pass
 
 # Check valid geometries
-def valid_geom(geom):
+# def valid_geom(geom):
+#     try:
+#         return loads(geom)
+#     except:
+#         return np.nan
+
+# Fix Bad Geometries
+# def valid_geom(geom):
+#     try:
+#         return wkt.dumps(geom)
+#     except:
+#         return np.nan
+
+# Find Invalid Geos
+def valid_geoms(x):
     try:
-        return loads(geom)
+        return shapely.wkt.loads(x)
     except:
         return np.nan
 

@@ -60,52 +60,66 @@ engine = create_engine("mysql+pymysql://{}:{}@{}/{}".format(user,pwd,host,databa
 con = engine.connect()
 
 # Read ML data
-df_lease = pd.read_csv(os.getcwd() + "/data/df_ml_v1_march.csv")
+con = engine.connect()
 
-# Drop column
-df_lease.drop(df_lease.filter(regex="Unname"), axis=1, inplace=True)
+# query = '''
+#         SELECT *
+#         FROM stroom_main.df_raw_july
+#         '''
+#
+# df_ml = pd.read_sql(query, con)
+
+# Construct opex / sqft column
+# df_ml['opex_sqft_month'] = (df_ml['Most_Recent_Operating_Expenses'].apply(clean_currency).astype(float)/df_ml['EstRentableArea'].astype(float))/12
+# df_ml['opex_sqft_month'].replace([np.inf, -np.inf], np.nan, inplace=True)
+# df_ml['opex_sqft_month'] = df_ml['opex_sqft_month'].apply(lambda x: round(x, 2))
+#
+# # Area per unit
+# df_ml['Area_per_unit'] = df_ml['EstRentableArea'].astype(float) / df_ml['Size'].astype(float)
+# df_ml['Area_per_unit'].replace([np.inf, -np.inf], np.nan, inplace=True)
+# df_ml['Area_per_unit'] = pd.to_numeric(df_ml['Area_per_unit'], errors="coerce")
+
+df_ml = pd.read_csv(os.getcwd() + '/data/df_ml_c2.csv')
 
 # Subset cols
-df_sub = df_lease[['Year Built',
-                   'Size',
-                   'Most Recent Physical Occupancy', # average of comps
-                   'Operating Expenses at Contribution', # average of comps
-                   'WalkScore',
-                   'TransitScore',
-                   'geohash',
-                   'EstRentableArea', # gross area
-                   'Loan Status', # mode of geo
-                   'EstValue',
-                   'CapRate', # average of comps
-                   'Ownership',
-                   'AirCon',
-                   'Pool',
-                   'Condition',
-                   'constructionType',
-                   'parkingType',
-                   'numberOfBuildings',
-                   'propertyTaxAmount',
-                   'taxRate',
-                   'Rent_1Br',
-                   'mos_since_last_sale',
-                   'Revenue_per_sqft_month']]
+df_ml_sub = df_ml[[
+                    'Year_Built',
+                    'Size',
+                    'opex_sqft_month',
+                    'WalkScore',
+                    'TransitScore',
+                    'geohash',
+                    'EstRentableArea',
+                    'EstValue',
+                    'Cap_Rate_Iss',
+                    'Ownership',
+                    'AirCon',
+                    'Pool',
+                    'Condition',
+                    'constructionType',
+                    'parkingType',
+                    'numberOfBuildings',
+                    'propertyTaxAmount',
+                    'taxRate',
+                    'zrent_median',
+                    'mos_since_last_sale',
+                    'Median_Home_Value_2019',
+                    'Area_per_unit',
+                    # Dependent variable
+                    'Revenue_per_sqft_month'
+                 ]]
 
-
-# Convert percentage to numeric
-df_sub['Most Recent Physical Occupancy'] = df_sub['Most Recent Physical Occupancy'].apply(clean_percent).astype('float')
-
-# Currency to numeric
-df_sub['Operating Expenses at Contribution'] = df_sub['Operating Expenses at Contribution'].apply(clean_currency).astype('float')
-
-# split df into train and test
-X_train, X_test, y_train, y_test = train_test_split(df_sub.iloc[:,0:22], df_sub.iloc[:,-1], test_size=0.1, random_state=42)
 
 # Encode categorical variables
-cat_vars = ['geohash','Loan Status','Ownership','AirCon','Pool','Condition','constructionType','parkingType']
-cat_transform = ColumnTransformer([('cat', OneHotEncoder(handle_unknown='ignore'), cat_vars)], remainder='passthrough')
+cat_vars = ['geohash','Ownership','AirCon','Pool','Condition','constructionType','parkingType']
 
-encoder = cat_transform.fit(df_sub.iloc[:,0:22])
+for col in cat_vars:
 
+    df_ml_sub[col] = df_ml_sub[col].astype('category')
+
+cat_transform = ColumnTransformer([('cat', OneHotEncoder(handle_unknown='ignore', sparse=True), cat_vars)], remainder='passthrough')
+
+encoder = cat_transform.fit(df_ml_sub.iloc[:,0:22])
 
 # Calculate distance between properties
 # Define radius and find similar leases executed recently within the proximity.
@@ -119,7 +133,7 @@ def calc_distance(prop_loc, Lat, Long):
 
 
 # Function to calculate optimal rent.
-def calc_rent(prop_address, proptype, yr_built, space, units, ameneties, assval, occupancy, opex, taxAmt, taxRate, rent, lastSaleDate, geohash):
+def calc_rev(prop_address, yr_built, space, units, assval, opex, taxAmt, taxRate, rent, cap, owner, aircon, pool, condition, construction, parking, numBldgs, zrent, home, area, lastSaleDate, geohash):
 
     np.random.seed(0)
 
@@ -139,7 +153,7 @@ def calc_rent(prop_address, proptype, yr_built, space, units, ameneties, assval,
     if len(lastSaleDate) <= 10:
         lastSaleDate = datetime.strptime(lastSaleDate, '%Y-%m-%d')
     else:
-        lastSaleDate = datetime.strptime(lastSaleDate, '%Y-%m-%dT%H:%M:%S').strftime('%Y-%m-%d')
+        lastSaleDate = datetime.strptime(lastSaleDate, '%Y-%m-%d %H:%M:%S').strftime('%Y-%m-%d')
         lastSaleDate = datetime.strptime(lastSaleDate, '%Y-%m-%d')
 
     # Calculate Months since last sale date
@@ -161,31 +175,32 @@ def calc_rent(prop_address, proptype, yr_built, space, units, ameneties, assval,
     # Create a test data point and save to csv - the input format for SageMaker Endpoint
     df = pd.DataFrame({
 
-                               'Year Built': int(yr_built),
-                               'Size': int(units),
-                               'Most Recent Physical Occupancy': float(occupancy),
-                               'Operating Expenses at Contribution': float(opex),
-                               'WalkScore': Walk,
-                               'TransitScore': Transit,
-                               'geohash': geohash,
-                               'EstRentableArea': space,
-                               'Loan Status': df_sub['Loan Status'].mode(),
-                               'EstValue': assval,
-                               'CapRate': df_sub['CapRate'].median(),
-                               'Ownership': np.random.choice(df_sub['Ownership'], 1)[0],
-                               'AirCon': np.random.choice(df_sub['AirCon'], 1)[0],
-                               'Pool': np.random.choice(df_sub['Pool'], 1)[0],
-                               'Condition': np.random.choice(df_sub['Condition'], 1)[0],
-                               'constructionType': np.random.choice(df_sub['constructionType'], 1)[0],
-                               'parkingType': np.random.choice(df_sub['parkingType'], 1)[0],
-                               'numberOfBuildings': df_sub['numberOfBuildings'].median(),
-                               'propertyTaxAmount': taxAmt,
-                               'taxRate': taxRate,
-                               'Rent_1Br': rent,
-                               'mos_since_last_sale': mosLastSale
+                            'Year_Built': int(yr_built),
+                            'Size': int(units),
+                            'opex_sqft_month': float(opex),
+                            'WalkScore': Walk,
+                            'TransitScore': Transit,
+                            'geohash': geohash,
+                            'EstRentableArea': int(space),
+                            'EstValue': float(assval),
+                            'Cap_Rate_Iss': float(cap),
+                            'Ownership': str(owner),
+                            'AirCon': str(aircon),
+                            'Pool': str(pool),
+                            'Condition': str(condition),
+                            'constructionType': str(construction),
+                            'parkingType': str(parking),
+                            'numberOfBuildings': int(float(numBldgs)),
+                            'propertyTaxAmount': float(taxAmt),
+                            'taxRate': float(taxRate),
+                            'zrent_median': float(zrent),
+                            'mos_since_last_sale': int(mosLastSale),
+                            'Median_Home_Value_2019': float(home),
+                            'Area_per_unit': float(area),
 
-                        }, index=[0])
+                     }, index=[0])
 
+    print("test df", df.loc[0, :].values.tolist())
 
     # Encode to handle categorical variables
     testpoint = encoder.transform(df).toarray().tolist()
@@ -200,13 +215,15 @@ def calc_rent(prop_address, proptype, yr_built, space, units, ameneties, assval,
 
     payload = ', '.join(map(str, testpoint[0]))
 
+    #print("payload length", len(payload))
+
 
     '''
     Endoint Name
     '''
 
     # Predict method
-    endpoint_name = "sagemaker-xgboost-2022-03-29-19-22-30-787"
+    endpoint_name = "sagemaker-xgboost-2022-08-06-01-19-20-861"
 
     predictor = Predictor(
                           endpoint_name = endpoint_name,
@@ -221,11 +238,6 @@ def calc_rent(prop_address, proptype, yr_built, space, units, ameneties, assval,
     res = float(response[0][0])
 
     print("Predicted value", res)
-
-
-    '''
-    Query to pull nearby comps - Default to 1 mile radius
-    '''
 
     # Apply units / size filter - set lower and upper bounds
     lower_bound = int(units) - 65*int(units)/100
@@ -246,7 +258,7 @@ def calc_rent(prop_address, proptype, yr_built, space, units, ameneties, assval,
     for i in range(2):
 
         query = '''
-                select * from stroom_main.df_raw_v3_july
+                select * from stroom_main.df_raw_v6_july
                 where st_distance_sphere(Point({},{}), coords) <= {};
                 '''.format(Long, Lat, radius_cmbs)
 
@@ -261,11 +273,12 @@ def calc_rent(prop_address, proptype, yr_built, space, units, ameneties, assval,
     if df_raw.shape[0] > 0:
 
         # Add additional cols
-        df_raw['Revenue_per_sqft_year'] = df_raw['Revenue_per_sqft_month'] * 12
-        df_raw['Revenue_per_sqft_year'] = df_raw['Revenue_per_sqft_year'].apply('${:,.1f}'.format)
+        df_raw['Revenue_per_sqft_month'] = df_raw['Revenue_per_sqft_month'].apply(clean_currency)
+        df_raw['Revenue_per_sqft_year'] = df_raw['Revenue_per_sqft_month'].astype(float) * 12
+        df_raw['Revenue_per_sqft_year'] = df_raw['Revenue_per_sqft_year'].apply('${:,.2f}'.format)
 
         # Monthly Revenue / Unit / Month
-        df_raw['EstRevenueMonthly'] = (df_raw['Preceding_Fiscal_Year_Revenue']/df_raw['Size'])/12
+        df_raw['EstRevenueMonthly'] = (df_raw['Preceding_Fiscal_Year_Revenue'].astype(float)/df_raw['Size'].astype(float))/12
 
         # Apply a function to calculate distance from the subject property to Lease Sample DataFrame
         df_raw['Distance'] = df_raw.apply(lambda x: calc_distance(prop_loc, x['Lat'], x['Long']), axis=1)
@@ -325,7 +338,7 @@ def calc_rent(prop_address, proptype, yr_built, space, units, ameneties, assval,
                                     HAVING ds.geomatch = 'no match'
                                     AND st_distance_sphere(Point({},{}), ds.coords) <= {}
                                     AND dzr.bed_rooms <= 4
-                                    AND avg_rent <= 10000;
+                                    AND (avg_rent > 100 and avg_rent <= 10000);
 
                                     '''.format(state, Long, Lat, radius_noncmbs)
 

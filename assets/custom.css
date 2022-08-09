@@ -12,7 +12,7 @@
 
 .map-style {
   padding: 1% 0px 0px 0px;
-  margin-left: 71px;
+  margin-left: 72px;
   position: absolute;
 
 }
@@ -89,11 +89,11 @@ div#graph-area {
 
 
 .map-graph1 {
-   display": inline-block,
-   width: 52em,
-   float: left,
-   height: 700px,
-   margin-top: 2%
+   display": inline-block!important,
+   width: 52em!important,
+   float: left!important,
+   height: 700px!important,
+   margin-top: 2%!important
  }
 
 /* Year Built and Renovated */
@@ -484,7 +484,7 @@ div#lease-type {
 }
 
 div#ameneties {
-  width: 50%;
+  width: 53%;
   font-size: 110%;
   height: 40px;
   margin-top: 0.5%;
@@ -520,7 +520,7 @@ div#asking-rent-slider {
 .market-deal-style {
 
   height: 44px;
-  width: 28%;
+  width: 22%;
   float: left;
   margin-right: -90px;
 
@@ -558,7 +558,7 @@ div#upside-deal {
 
   height: 58px;
   float: left;
-  padding-left: 0px;
+  padding-left: 50px;
 }
 
 div#upside-slider {
