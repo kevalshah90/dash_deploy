@@ -200,8 +200,6 @@ def calc_rev(prop_address, yr_built, space, units, assval, opex, taxAmt, taxRate
 
                      }, index=[0])
 
-    print("test df", df.loc[0, :].values.tolist())
-
     # Encode to handle categorical variables
     testpoint = encoder.transform(df).toarray().tolist()
 

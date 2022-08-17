@@ -637,6 +637,15 @@ div#overlay {
   margin-left: 0px;
 }
 
+.row-prop-count {
+  float: right;
+  margin-right: 2em;
+}
+
+.row-map-deal {
+  margin-top: 30px;
+}
+
 .buy-box {
   font-weight: bold;
 }

@@ -44,6 +44,8 @@ import google_streetview.api
 # Google Maps API key
 import googlemaps
 gmaps = googlemaps.Client(key="AIzaSyC0XCzdNwzI26ad9XXgwFRn2s7HrCWnCOk")
+gmaps_api = "AIzaSyC0XCzdNwzI26ad9XXgwFRn2s7HrCWnCOk"
+
 
 # Mapbox
 MAPBOX_KEY="pk.eyJ1Ijoic3Ryb29tIiwiYSI6ImNsNWVnMmpueTEwejQza252ZnN4Zm02bG4ifQ.SMGyKFikz4uDDqN6JvEq7Q"
@@ -222,7 +224,15 @@ layout = html.Div([
                             [
 
                                 # Images
-                                html.Div(id="carousel"),
+                                #html.Div(id="carousel"),
+
+                                # Images
+                                html.Iframe(
+                                            id = "streetview_comps",
+                                            referrerPolicy="no-referrer-when-downgrade",
+                                            style={"height": "400px", "width": "100%", "frameborder":"0", "border":"0"}
+                                           ),
+
 
                                 dbc.Label("Property Name:", style={"color":"black", "font-weight": "bold", "margin-right":"10px", "margin-top":"1.5%"}),
                                 dbc.Label("Property Name:", id="prop_name"),
@@ -299,7 +309,12 @@ layout = html.Div([
                            [
 
                                # Images
-                               html.Div(id="carousel-z"),
+                               #html.Div(id="carousel-z"),
+                               html.Iframe(
+                                           id = "streetview-z",
+                                           referrerPolicy="no-referrer-when-downgrade",
+                                           style={"height": "400px", "width": "100%", "frameborder":"0", "border":"0"}
+                                          ),
 
                                dbc.Label("Property Name:", style={"color":"black", "font-weight": "bold", "margin-right":"10px", "margin-top":"1.5%"}),
                                dbc.Label("Property Name:", id="prop_name_z"),
@@ -380,7 +395,12 @@ layout = html.Div([
                             [
 
                                 # Images
-                                html.Div(id="carousel-s"),
+                                #html.Div(id="carousel-s"),
+                                html.Iframe(
+                                            id = "streetview-s",
+                                            referrerPolicy="no-referrer-when-downgrade",
+                                            style={"height": "400px", "width": "100%", "frameborder":"0", "border":"0"}
+                                           ),
 
                                 dbc.Label("Address:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
                                 dbc.Label("Address:", id="Address-s"),
@@ -754,13 +774,11 @@ def autopopulate_propdetails(address, is_open):
             df_mf.reset_index(drop=True, inplace=True)
 
             details = df_mf[['Year_Built','Renovated','EstRentableArea','Size','Ownership','AirCon','Pool','Condition','constructionType','parkingType','numberOfBuildings','propertyTaxAmount','taxRate','Preceding_Fiscal_Year_Revenue','EstValue','lastSaleDate']].iloc[0].to_list()
+            print("Revenue", details[13])
 
-            if details[0] and details[2] and details[3] not in [0, 0.0, '0', '0.0']:
-
-                print("Match found in DB")
-
-                print(details)
-
+            # check if values are valid. Avg. sq.ft area (RentableArea / Units)
+            if details[0] and details[2] and details[3] not in [0, 0.0, '0', '0.0'] and (float(details[2])/float(details[3])) > 250:
+                print("Match Found in DB")
                 # Get Ameneties
                 amn_lst = ["Luxurious", "Park", "Gym", "Laundry", "Pool", "Rent-control", "Bike", "Patio", "Concierge", "Heat"]
 
@@ -772,7 +790,7 @@ def autopopulate_propdetails(address, is_open):
                 avdata = attom_api_avalue(addr)
                 avdata = json.loads(avdata.decode("utf-8"))
 
-                print("Attom api response", avdata)
+                print("Attom API response", avdata)
 
         else:
 
@@ -780,8 +798,7 @@ def autopopulate_propdetails(address, is_open):
             avdata = attom_api_avalue(addr)
             avdata = json.loads(avdata.decode("utf-8"))
 
-            print("Attom api response", avdata)
-
+            print("Attom API response", avdata)
 
         if avdata is not None:
 
@@ -934,6 +951,7 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
     if proptype == "Multi-Family":
 
         # Generate Address string
+        df['Zip_Code'] = df['Zip_Code'].astype(float).apply('{:.0f}'.format)
         addr_cols = ["Address", "City", "State", "Zip_Code"]
 
         df['Address_Comp'] = df[addr_cols].apply(lambda row: ' '.join(row.values.astype(str)), axis=1)
@@ -1217,7 +1235,7 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
 
                # Assessed Value - check API call, if not found prox_mean
                if details and details[14] is not None:
-                   assVal = float(details[11])
+                   assVal = float(details[14])
                elif api_store is not None:
                    if api_store['attom_api'] is not None:
                        try:
@@ -1803,7 +1821,7 @@ def update_table(address, proptype, built, units_acq, space_acq, ameneties, n_cl
                         [
 
                              Output("modal-1","is_open"),
-                             Output("carousel","children"),
+                             Output("streetview_comps","src"),
                              Output("prop_name","children"),
                              Output("Address","children"),
                              Output("Size","children"),
@@ -1873,126 +1891,135 @@ def display_popup1(clickData, n_clicks, is_open_c, query_store):
         lastSaleDate = clickData["points"][0]["customdata"][11]
         Distance = clickData["points"][0]["customdata"][12]
 
+        # Construct URL for Interactive Streetview Map
+        lat, long = get_geocodes(Address)
+        streetview_url = "https://www.google.com/maps/embed/v1/streetview?key={}&location={},{}&heading=180&pitch=10&fov=75".format(gmaps_api, lat, long)
+
         # Check dataframe - default view or property search geofilter
-        if query_store:
+        # if query_store:
+        #
+        #     df = pd.DataFrame(query_store)
+        #
+        #     # Construct a list of dictionaries
+        #     df = df[df['Property_Name'] == Name]
+        #
+        #     index = df.index[0]
+        #     img_dict = df['Image_dicts'][index]
+        #
+        #     # Construct carousel object
+        #     try:
+        #
+        #         if type(img_dict) is str:
+        #
+        #             img_dict = ast.literal_eval(img_dict)
+        #
+        #             # Add labels for carousel items property
+        #             c = 1
+        #             img_list = []
+        #
+        #             # Make a call to obtain pre-signed urls of each object in S3
+        #             for key, values in img_dict.items():
+        #
+        #                 for v in values:
+        #
+        #                     parts = os.path.split(v)
+        #
+        #                     url = create_presigned_url('gmaps-images-6771', 'property_images/{}'.format(parts[len(parts)-1]))
+        #
+        #                     # Create a list of dicts for carousel
+        #                     img_dict1 = {"key": c, "src": url, "img_style": {"width": "300px", "height": "300px"}}
+        #                     c = c + 1
+        #
+        #                     img_list.append(img_dict1)
+        #
+        #             carousel = dbc.Carousel(
+        #                                     items=img_list,
+        #                                     controls=True,
+        #                                     indicators=True,
+        #                        )
+        #
+        #         else:
+        #
+        #              # Get streetview image
+        #
+        #              lat, long = get_geocodes(Address)
+        #              name = streetview(lat, long, 'streetview')
+        #
+        #              # Construct URL
+        #              url = create_presigned_url('gmaps-images-6771', 'property_images/{}'.format(name))
+        #
+        #              if "None" in url:
+        #                  url = create_presigned_url('gmaps-images-6771', 'property_images/no_imagery.png')
+        #
+        #              carousel = dbc.Carousel(
+        #                                      items=[
+        #                                              {"key": "1", "src": url, "img_style": {"width": "300px", "height": "300px"}},
+        #                                      ],
+        #                                      controls=False,
+        #                                      indicators=False,
+        #                         )
+        #
+        #
+        #     except Exception as e:
+        #         print('Exception', e)
+        #         url = create_presigned_url('gmaps-images-6771', 'property_images/no_imagery.png')
+        #
+        #         carousel = dbc.Carousel(
+        #                                 items=[
+        #                                         {"key": "1", "src": url, "img_style": {"width": "300px", "height": "300px"}},
+        #                                 ],
+        #                                 controls=False,
+        #                                 indicators=False,
+        #                     )
 
-            df = pd.DataFrame(query_store)
+        if Built in ["null", 0, None]:
+            Built_fmt = "N/A"
+        else:
+            Built_fmt = int(float(Built))
 
-            # Construct a list of dictionaries
-            df = df[df['Property_Name'] == Name]
+        if Revenue in ["null", 0, None]:
+            Revenue_fmt = "N/A"
+        else:
+            Revenue = float(Revenue)
+            Revenue_fmt = "${:,.0f}".format(Revenue)
 
-            index = df.index[0]
-            img_dict = df['Image_dicts'][index]
+        if Opex in ["null", 0, None, 0.0, "0.0", "0"]:
+            Opex_fmt = "-"
+        else:
+            Opex = float(Opex)
+            Opex_fmt = "${:,.0f}".format(Opex)
 
-            # Construct carousel object
-            try:
+        if Occupancy in ["null", "0%", 0, None]:
+            Occupancy_fmt = "-"
+        else:
+            Occupancy = Occupancy.strip('%')
+            Occupancy = float(Occupancy)
+            Occupancy_fmt = "{:.0f}%".format(Occupancy)
 
-                if type(img_dict) is str:
+        if RentArea in ["null", 0, None]:
+            RentArea_fmt = "-"
+        else:
+            RentArea = float(RentArea)
+            RentArea_fmt = "{:,.0f} sq.ft".format(RentArea)
 
-                    img_dict = ast.literal_eval(img_dict)
+        if AssessedValue in ["null", 0, None]:
+            AssessedValue_fmt = "-"
+        else:
+            AssessedValue = float(AssessedValue)
+            AssessedValue_fmt = "${:,.0f}".format(AssessedValue)
 
-                    # Add labels for carousel items property
-                    c = 1
-                    img_list = []
+        if lastSaleDate in ["null", None, 0, "0", 0.0, "0.0"]:
+            lastSaleDate_fmt = "-"
+        else:
+            lastSaleDate_fmt = lastSaleDate.split(' ')[0]
 
-                    # Make a call to obtain pre-signed urls of each object in S3
-                    for key, values in img_dict.items():
+        if Distance in [None, "null", "N/A"]:
+            Distance_fmt = "-"
+        else:
+            Distance = float(Distance)
+            Distance_fmt = "{:,.1f} miles".format(Distance)
 
-                        for v in values:
-
-                            parts = os.path.split(v)
-
-                            url = create_presigned_url('gmaps-images-6771', 'property_images/{}'.format(parts[len(parts)-1]))
-
-                            # Create a list of dicts for carousel
-                            img_dict1 = {"key": c, "src": url, "img_style": {"width": "300px", "height": "300px"}}
-                            c = c + 1
-
-                            img_list.append(img_dict1)
-
-                    carousel = dbc.Carousel(
-                                            items=img_list,
-                                            controls=True,
-                                            indicators=True,
-                               )
-
-                else:
-
-                     # Get streetview image
-
-                     lat, long = get_geocodes(Address)
-                     name = streetview(lat, long, 'streetview')
-
-                     # Construct URL
-                     url = create_presigned_url('gmaps-images-6771', 'property_images/{}'.format(name))
-
-                     if "None" in url:
-                         url = create_presigned_url('gmaps-images-6771', 'property_images/no_imagery.png')
-
-                     carousel = dbc.Carousel(
-                                             items=[
-                                                     {"key": "1", "src": url, "img_style": {"width": "300px", "height": "300px"}},
-                                             ],
-                                             controls=False,
-                                             indicators=False,
-                                )
-
-
-            except Exception as e:
-                print('Exception', e)
-                url = create_presigned_url('gmaps-images-6771', 'property_images/no_imagery.png')
-
-                carousel = dbc.Carousel(
-                                        items=[
-                                                {"key": "1", "src": url, "img_style": {"width": "300px", "height": "300px"}},
-                                        ],
-                                        controls=False,
-                                        indicators=False,
-                            )
-
-            if Revenue in ["null", 0, None]:
-                Revenue_fmt == "N/A"
-            else:
-                Revenue = float(Revenue)
-                Revenue_fmt = "${:,.0f}".format(Revenue)
-
-            if Opex in ["null", 0, None]:
-                Opex_fmt == "-"
-            else:
-                Opex = float(Opex)
-                Opex_fmt = "${:,.0f}".format(Opex)
-
-            if Occupancy in ["null", "0%", 0, None]:
-                Occupancy_fmt == "-"
-            else:
-                Occupancy = Occupancy.strip('%')
-                Occupancy = float(Occupancy)
-                Occupancy_fmt = "{:.0f}%".format(Occupancy)
-
-            if RentArea in ["null", 0, None]:
-                RentArea_fmt = "-"
-            else:
-                RentArea = float(RentArea)
-                RentArea_fmt = "{:,.0f} sq.ft".format(RentArea)
-
-            if AssessedValue in ["null", 0, None]:
-                AssessedValue_fmt = "-"
-            else:
-                AssessedValue = float(AssessedValue)
-                AssessedValue_fmt = "${:,.0f}".format(AssessedValue)
-
-            if lastSaleDate in [None, "null"]:
-                lastSaleDate_fmt = "-"
-            else:
-                lastSaleDate_fmt = lastSaleDate
-
-            if Distance in [None, "null", "N/A"]:
-                Distance_fmt = "-"
-            else:
-                Distance = float(Distance)
-                Distance_fmt = "{:,.1f} miles".format(Distance)
-
-        return(not is_open_c, carousel, Name, Address, Size, Built, Rents_fmt, Revenue_fmt, Opex_fmt, Occupancy_fmt, RentArea_fmt, AssessedValue_fmt, lastSaleDate_fmt, Distance_fmt)
+        return(not is_open_c, streetview_url, Name, Address, Size, Built_fmt, Rents_fmt, Revenue_fmt, Opex_fmt, Occupancy_fmt, RentArea_fmt, AssessedValue_fmt, lastSaleDate_fmt, Distance_fmt)
 
     elif n_clicks:
         return is_open_c
@@ -2005,7 +2032,7 @@ def display_popup1(clickData, n_clicks, is_open_c, query_store):
                           [
 
                                Output("modal-2","is_open"),
-                               Output("carousel-s","children"),
+                               Output("streetview-s","src"),
                                Output("Address-s","children"),
                                Output("Size-s","children"),
                                Output("Yr_Built-s","children"),
@@ -2049,23 +2076,26 @@ def display_popup2(clickData, n_clicks_sp, is_open_sp, query_store, table_store)
 
         # Get coordinates
         lat, long = get_geocodes(Address)
+        streetview_url = "https://www.google.com/maps/embed/v1/streetview?key={}&location={},{}&heading=180&pitch=10&fov=75".format(gmaps_api, lat, long)
 
-        # Get updated name of the streetview image
-        name = streetview(lat, long, 'streetview')
+        # # Get updated name of the streetview image
+        # name = streetview(lat, long, 'streetview')
+        #
+        # # Construct URL
+        # url = create_presigned_url('gmaps-images-6771', 'property_images/{}'.format(name))
+        #
+        # if "None" in url:
+        #     url = create_presigned_url('gmaps-images-6771', 'property_images/no_imagery.png')
+        #
+        # carousel = dbc.Carousel(
+        #                         items=[
+        #                                  {"key": "1", "src": url, "img_style": {"width": "300px", "height": "300px"}},
+        #                         ],
+        #                         controls=False,
+        #                         indicators=False,
+        #            )
 
-        # Construct URL
-        url = create_presigned_url('gmaps-images-6771', 'property_images/{}'.format(name))
 
-        if "None" in url:
-            url = create_presigned_url('gmaps-images-6771', 'property_images/no_imagery.png')
-
-        carousel = dbc.Carousel(
-                                items=[
-                                         {"key": "1", "src": url, "img_style": {"width": "300px", "height": "300px"}},
-                                ],
-                                controls=False,
-                                indicators=False,
-                   )
 
         # Calculate Rents from Comps Table
         if table_store:
@@ -2119,7 +2149,7 @@ def display_popup2(clickData, n_clicks_sp, is_open_sp, query_store, table_store)
             PropTax = float(PropTax)
             PropTax_fmt = "${:,.0f}".format(PropTax)
 
-        return(not is_open_sp, carousel, Address, Size, Built, RentArea_fmt, rents_fmt, ExpRevenue_fmt, AssessedVal_fmt, PropTax_fmt)
+        return(not is_open_sp, streetview_url, Address, Size, Built, RentArea_fmt, rents_fmt, ExpRevenue_fmt, AssessedVal_fmt, PropTax_fmt)
 
     elif n_clicks_sp:
         return is_open_sp
@@ -2132,7 +2162,7 @@ def display_popup2(clickData, n_clicks_sp, is_open_sp, query_store, table_store)
                           [
 
                                Output("modal-3","is_open"),
-                               Output("carousel-z","children"),
+                               Output("streetview-z","src"),
                                Output("prop_name_z","children"),
                                Output("Address_z","children"),
                                #Output("Size_z","children"),
@@ -2231,15 +2261,19 @@ def display_popup3(clickData, n_clicks_z, is_open_z, query_store):
         Ameneties = clickData["points"][0]["customdata"][9]
         Distance = clickData["points"][0]["customdata"][10]
 
-        if img_link:
+        # if img_link:
+        #
+        #     carousel = dbc.Carousel(
+        #                             items=[
+        #                                      {"key": "1", "src": img_link, "img_style": {"width": "300px", "height": "300px"}},
+        #                             ],
+        #                             controls=True,
+        #                             indicators=True,
+        #                )
 
-            carousel = dbc.Carousel(
-                                    items=[
-                                             {"key": "1", "src": img_link, "img_style": {"width": "300px", "height": "300px"}},
-                                    ],
-                                    controls=True,
-                                    indicators=True,
-                       )
+        # Construct URL for Interactive Streetview Map
+        lat, long = get_geocodes(Address)
+        streetview_url = "https://www.google.com/maps/embed/v1/streetview?key={}&location={},{}&heading=180&pitch=10&fov=75".format(gmaps_api, lat, long)
 
         # formatted for default view (NA) and calculated / post button click and handling of None value
         if Name in [None, 'nan']:
@@ -2293,7 +2327,7 @@ def display_popup3(clickData, n_clicks_z, is_open_z, query_store):
             Distance = float(Distance)
             Distance_fmt = "{:,.1f} miles".format(Distance)
 
-        return(not is_open_z, carousel, Name_fmt, Address_fmt, r0_fmt, r1_fmt, r2_fmt, r3_fmt, Ameneties_fmt, Distance_fmt)
+        return(not is_open_z, streetview_url, Name_fmt, Address_fmt, r0_fmt, r1_fmt, r2_fmt, r3_fmt, Ameneties_fmt, Distance_fmt)
 
     elif n_clicks_z:
         return is_open_z

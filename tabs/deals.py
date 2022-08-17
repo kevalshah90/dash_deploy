@@ -6,7 +6,7 @@ import json
 import geojson
 import ast
 import dash
-from dash.dependencies import Input, Output, State
+from dash.dependencies import Input, Output, State, ClientsideFunction
 from dash import dcc
 from dash import html, dash_table
 import dash_bootstrap_components as dbc
@@ -44,6 +44,7 @@ s3 = boto3.client('s3')
 # Google Maps API key
 import googlemaps
 gmaps = googlemaps.Client(key="AIzaSyC0XCzdNwzI26ad9XXgwFRn2s7HrCWnCOk")
+gmaps_api = "AIzaSyC0XCzdNwzI26ad9XXgwFRn2s7HrCWnCOk"
 
 # Mapbox
 MAPBOX_KEY="pk.eyJ1Ijoic3Ryb29tIiwiYSI6ImNsNWVnMmpueTEwejQza252ZnN4Zm02bG4ifQ.SMGyKFikz4uDDqN6JvEq7Q"
@@ -105,11 +106,6 @@ except Exception as e:
     df_market = pd.DataFrame({})
     df_loan = pd.DataFrame({})
 
-# Read census tract level geometries and geo data
-url = "https://stroom-images.s3.us-west-1.amazonaws.com/usgeodata_july.geojson"
-
-with urlopen(url) as response:
-    geo_json = json.load(response)
 
 # App Layout for designing the page and adding elements
 layout = html.Div([
@@ -213,33 +209,61 @@ layout = html.Div([
 
                         ),
 
-                        # Loan Status
+                        # Cap Rate
                         dbc.InputGroup(
                             [
 
-                               dbc.InputGroupText("Loan"),
-                               dcc.Dropdown(
+                                dbc.InputGroupText("Cap Rate (%)"),
+                                dbc.Input(
+                                          id="cap-rate-min",
+                                          persistence=True,
+                                          persistence_type="memory",
+                                          placeholder="Min",
+                                          style={"height":"44px"}
+                                         ),
+                                dbc.Input(
+                                          id="cap-rate-max",
+                                          persistence=True,
+                                          persistence_type="memory",
+                                          placeholder="Max",
+                                          style={"height":"44px","margin-left":"-10px"}
+                                         ),
 
-                                              id="loan-deal",
-                                              persistence=True,
-                                              persistence_type="memory",
-                                              options=[{"label": name, "value": name} for name in LoanStatus_List],
-                                              optionHeight=50,
-                                              placeholder="Select"
-
-                               ),
-
-                         ],
-
-                         className="loan-deal-style",
+                            ], style={"height":"44px", "width":"18em", "margin-left":"1px!important"},
 
                         ),
 
-                        dbc.Label(id="prop_count", style={"float":"right", "color":"black", "font-weight": "bold"}),
+                        # Loan Status
+                        # dbc.InputGroup(
+                        #     [
+                        #
+                        #        dbc.InputGroupText("Loan"),
+                        #        dcc.Dropdown(
+                        #
+                        #                       id="loan-deal",
+                        #                       persistence=True,
+                        #                       persistence_type="memory",
+                        #                       options=[{"label": name, "value": name} for name in LoanStatus_List],
+                        #                       optionHeight=50,
+                        #                       placeholder="Select"
+                        #
+                        #        ),
+                        #
+                        #  ],
+                        #
+                        #  className="loan-deal-style",
+                        #
+                        # ),
 
                         #dbc.Button("Clear Properties", id="clear-properties-button", className="me-1", style={'height': '48px'}, n_clicks=0),
 
                    ], className="row-1-deal"),
+
+                   dbc.Row([
+
+                                dbc.Label(id="prop_count", style={"float":"right", "color":"black", "font-weight": "bold"}),
+
+                           ], className="row-prop-count"),
 
 
                    dbc.Row(
@@ -269,6 +293,7 @@ layout = html.Div([
                                                           {'label': 'Population', 'value': 'Pop'},
                                                           {'label': 'Income', 'value': 'Income'},
                                                           {'label': 'Price-Rent Ratio', 'value': 'Price_Rent_Ratio'},
+                                                          {'label': 'Rent-Price Ratio', 'value': 'Rent_Price_Ratio'},
                                                           {'label': 'Income change (%)', 'value': 'Income-change'},
                                                           {'label': 'Population change (%)', 'value': 'Pop-change'},
                                                           {'label': 'Home Value change (%)', 'value': 'Home-value-change'},
@@ -350,7 +375,15 @@ layout = html.Div([
                                             [
 
                                                 # Images
-                                                html.Div(id="carousel_deal"),
+                                                html.Iframe(
+                                                            id = "streetview_deal",
+                                                            #src="https://www.google.com/maps/embed/v1/streetview?key=AIzaSyC0XCzdNwzI26ad9XXgwFRn2s7HrCWnCOk&location=37.3050709,-121.9756233&heading=210&pitch=10&fov=35",
+                                                            #src="https://www.google.com/maps/embed/v1/view?key=AIzaSyC0XCzdNwzI26ad9XXgwFRn2s7HrCWnCOk&center=-33.8569,151.2152&zoom=18&maptype=satellite",
+                                                            referrerPolicy="no-referrer-when-downgrade",
+                                                            style={"height": "400px", "width": "100%", "frameborder":"0", "border":"0"}
+                                                           ),
+
+                                                #html.Div(id="carousel_deal"),
 
                                                 dbc.Card(
                                                     [
@@ -364,6 +397,7 @@ layout = html.Div([
 
                                                 dbc.Label("Property Type: ", style={"color":"black", "font-weight": "bold", "margin-right":"10px", "margin-top":"1%", "float":"left"}),
                                                 dbc.Label("Property Type:", id="Property_deal", style={"float":"left", "margin-top":"1%"}),
+                                                html.Br(),
                                                 html.Br(),
                                                 html.Br(),
 
@@ -382,12 +416,13 @@ layout = html.Div([
                                                 html.Br(),
                                                 html.Br(),
 
-                                                dbc.Label("Rentable Area:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
-                                                dbc.Label("Rentable Area:", id="rent-area-modal_deal", style={"float":"right", "margin-top":"1%"}),
+                                                dbc.Label("Rentable Area:", style={"color":"black", "font-weight": "bold", "margin-right":"10px", "float":"left"}),
+                                                dbc.Label("Rentable Area:", id="rent-area-modal_deal", style={"float":"left", "margin-top":"0%"}),
+                                                html.Br(),
                                                 html.Br(),
 
-                                                dbc.Label("Name:", style={"color":"black", "font-weight": "bold", "margin-right":"10px", "margin-top":"1.5%", "float":"left"}),
-                                                dbc.Label("Name:", id="prop_name_deal", style={"float":"left", "margin-top":"1%"}),
+                                                dbc.Label("Name:", style={"color":"black", "font-weight": "bold", "margin-right":"10px", "margin-top":"0%", "float":"left"}),
+                                                dbc.Label("Name:", id="prop_name_deal", style={"float":"left", "margin-top":"0%"}),
                                                 html.Br(),
                                                 html.Br(),
 
@@ -443,6 +478,18 @@ layout = html.Div([
                                                 dbc.Label("Last Sale Price:", id="sale-price_deal", style={"float":"right"}),
                                                 html.Br(),
 
+                                                dbc.Label("LTV:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
+                                                dbc.Label("LTV:", id="ltv_deal", style={"float":"right"}),
+                                                html.Br(),
+
+                                                dbc.Label("DSCR:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
+                                                dbc.Label("DSCR:", id="dscr_deal", style={"float":"right"}),
+                                                html.Br(),
+
+                                                dbc.Label("Maturity Date:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
+                                                dbc.Label("Maturity Date:", id="maturity_deal", style={"float":"right"}),
+                                                html.Br(),
+
                                                 #dbc.Button("View Returns Profile", color="primary", size="lg", id="returns_btn", className="mr-1", href="/returns", style={"float":"right"})
 
                                             ]
@@ -450,7 +497,7 @@ layout = html.Div([
                                         dbc.ModalFooter(
                                             [
 
-                                                dbc.Label("Sources: Attom Data", style={"float":"left", "padding-right":"26em", "font-size":"12px"}),
+                                                dbc.Label("Sources: Attom Data, Reported CMBS data", style={"float":"left", "padding-right":"26em", "font-size":"12px"}),
 
                                                 dbc.Button("OK", color="primary", size="lg", id="close_deal", className="mr-1"),
                                             ]
@@ -462,7 +509,8 @@ layout = html.Div([
                             ], style={"width": "50%"}),
 
                         ], width={"size": 10, "order": "last", "offset": 8},),
-                    ]),
+
+                    ], className="row-map-deal"),
 
                     html.Div(id="dummy-div"),
 
@@ -482,7 +530,7 @@ layout = html.Div([
                                              {"id":"Size", "name": "Number of Units"},
                                              {"id":"Preceding_Fiscal_Year_Revenue", "name": "Fiscal Revenue"},
                                              {"id":"Preceding_Fiscal_Year_Operating_Expenses", "name":"Fiscal Opex"},
-                                             {"id":"Most_Recent_Physical_Occupancy", "name":"Occupancy"},
+                                             {"id":"Occ", "name":"Occupancy"},
                                              {"id":"zrent_median", "name": "Rent (Median)"},
                                              {'id':"EstValue", "name":"Assessed Value"},
                                              {'id':"Loan_Status", "name":"Loan Status"},
@@ -560,7 +608,7 @@ layout = html.Div([
                       [
                           Input("market-deal", "value"),
                           Input("upside-deal", "value"),
-                          Input("loan-deal", "value"),
+                          #Input("loan-deal", "value"),
                           Input("overlay", "value"),
                           Input("demo-deal", "value"),
                           Input("location-deal", "value"),
@@ -568,6 +616,8 @@ layout = html.Div([
                           Input("year-built-max", "value"),
                           Input("num-units-min", "value"),
                           Input("num-units-max", "value"),
+                          Input("cap-rate-min", "value"),
+                          Input("cap-rate-max", "value"),
                           #Input("clear-properties-button", "n_clicks"),
                           Input("map-deal", "relayoutData")
                       ],
@@ -576,7 +626,7 @@ layout = html.Div([
                           State("rg-store", "data")
                       ],
                       )
-def update_map_deal(market, upside_dropdown, loan_dropdown, overlay, demo_dropdown, loc_dropdown, year_built_min, year_built_max, num_units_min, num_units_max, mapdata, msa_store, rg_store):
+def update_map_deal(market, upside_dropdown, overlay, demo_dropdown, loc_dropdown, year_built_min, year_built_max, num_units_min, num_units_max, cap_rate_min, cap_rate_max, mapdata, msa_store, rg_store):
 
     # check for triggered inputs / states
     ctx = dash.callback_context
@@ -637,8 +687,6 @@ def update_map_deal(market, upside_dropdown, loan_dropdown, overlay, demo_dropdo
         coords[1] = long
         zoom = 10
 
-        print(coords)
-
     # Reset to default coords when market cleared
     elif market is None and market not in Market_List or ctx.triggered_id == 'market-deal' and ctx.triggered[0]['value'] == '':
 
@@ -661,8 +709,6 @@ def update_map_deal(market, upside_dropdown, loan_dropdown, overlay, demo_dropdo
             #print('set coords market selected not triggered')
 
             if len(mapdata) > 1 and 'mapbox.center' in mapdata and 'mapbox.zoom' in mapdata:
-
-                print("mapdata", mapdata)
 
                 # set coords
                 coords[0] = mapdata['mapbox.center']['lat']
@@ -694,11 +740,21 @@ def update_map_deal(market, upside_dropdown, loan_dropdown, overlay, demo_dropdo
                        zrent_median,
                        Preceding_Fiscal_Year_Revenue,
                        Preceding_Fiscal_Year_Operating_Expenses,
-                       Most_Recent_Physical_Occupancy,
+                       Occ,
                        Cap_Rate_Iss,
                        PartyOwner1NameFull,
                        lastSaleDate,
-                       lastSalePrice
+                       lastSalePrice,
+                       LTV_Iss,
+                       Issuer_DSCR,
+                       Amortization_Type,
+                       Original_Term,
+                       Remaining_Term,
+                       Interest_Rate,
+                       Interest_Rate_Type,
+                       IO_Period,
+                       OriginationDate,
+                       Maturity_Date
                 from stroom_main.usgeodata_july_v1
                 where st_distance_sphere(Point({},{}), coords) <= {};
                 '''.format(coords[1], coords[0], 1609*10)
@@ -718,13 +774,22 @@ def update_map_deal(market, upside_dropdown, loan_dropdown, overlay, demo_dropdo
     # Apply filters
     if df_msa.shape[0] > 0:
 
-        if year_built_min and year_built_max or ctx.triggered_id in ["year-built-min", "year-built-max"]:
-            df_msa['Year_Built'] = df_msa['Year_Built'].astype(float).astype(int)
-            df_msa = df_msa[(df_msa['Year_Built'] >= int(year_built_min)) & (df_msa['Year_Built'] <= int(year_built_max))]
+        if year_built_max and year_built_min is not None:
+            if year_built_min.isnumeric() and year_built_max.isnumeric() and ctx.triggered_id in ["year-built-min", "year-built-max"]:
+                df_msa['Year_Built'] = df_msa['Year_Built'].astype(float).astype(int)
+                df_msa = df_msa[(df_msa['Year_Built'] >= int(year_built_min)) & (df_msa['Year_Built'] <= int(year_built_max))]
 
-        if num_units_min and num_units_max or ctx.triggered_id in ["num-units-min", "num-units-max"]:
-            df_msa['Size'] = df_msa['Size'].astype(float).astype(int)
-            df_msa = df_msa[(df_msa['Size'] >= int(num_units_min)) & (df_msa['Size'] <= int(num_units_max))]
+        if num_units_min and num_units_max is not None:
+            if num_units_min.isnumeric() and num_units_max.isnumeric() and ctx.triggered_id in ["num-units-min", "num-units-max"]:
+                df_msa['Size'] = df_msa['Size'].astype(float).astype(int)
+                df_msa = df_msa[(df_msa['Size'] >= int(num_units_min)) & (df_msa['Size'] <= int(num_units_max))]
+
+        if cap_rate_min and cap_rate_max is not None:
+            if cap_rate_min.isnumeric() and cap_rate_max.isnumeric() and ctx.triggered_id in ["cap-rate-min", "cap-rate-max"]:
+                df_msa['Cap_Rate_Iss'] = df_msa['Cap_Rate_Iss'].astype(float)
+                df_msa['Cap_Rate_Iss'] = df_msa['Cap_Rate_Iss']*100
+                df_msa = df_msa[(df_msa['Cap_Rate_Iss'] >= float(cap_rate_min)) & (df_msa['Cap_Rate_Iss'] <= float(cap_rate_max))]
+                df_msa['Cap_Rate_Iss'] = df_msa['Cap_Rate_Iss']/100
 
         # Generate Address string
         df_msa['Zip_Code'] = df_msa['Zip_Code'].astype(float).astype(int)
@@ -748,23 +813,23 @@ def update_map_deal(market, upside_dropdown, loan_dropdown, overlay, demo_dropdo
             elif upside_dropdown == "30+":
                 df1 = df1[(df1['diff_potential'] > 25)]
 
-        if loan_dropdown or ctx.triggered_id == "loan-deal":
-            if loan_dropdown == "Performing":
-                df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
-            elif loan_dropdown == "Paid in full":
-                df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
-            elif loan_dropdown == "Loss":
-                df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
-            elif loan_dropdown == "Significant Loss":
-                df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
-            elif loan_dropdown == "Performing, Watchlisted":
-                df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
-            elif loan_dropdown == "Paid in full, Defeased":
-                df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
-            elif loan_dropdown == "Performing, Specially Serviced":
-                df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
-            elif loan_dropdown == "Defeased":
-                df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
+        # if loan_dropdown or ctx.triggered_id == "loan-deal":
+        #     if loan_dropdown == "Performing":
+        #         df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
+        #     elif loan_dropdown == "Paid in full":
+        #         df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
+        #     elif loan_dropdown == "Loss":
+        #         df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
+        #     elif loan_dropdown == "Significant Loss":
+        #         df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
+        #     elif loan_dropdown == "Performing, Watchlisted":
+        #         df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
+        #     elif loan_dropdown == "Paid in full, Defeased":
+        #         df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
+        #     elif loan_dropdown == "Performing, Specially Serviced":
+        #         df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
+        #     elif loan_dropdown == "Defeased":
+        #         df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
 
         # Format columns
         df1['Zip_Code'] = df1['Zip_Code'].astype(float).apply('{:.0f}'.format)
@@ -777,12 +842,18 @@ def update_map_deal(market, upside_dropdown, loan_dropdown, overlay, demo_dropdo
         df1['Preceding_Fiscal_Year_Operating_Expenses'] = df1['Preceding_Fiscal_Year_Operating_Expenses'].apply(clean_currency)
         df1['Preceding_Fiscal_Year_Operating_Expenses'] = df1['Preceding_Fiscal_Year_Operating_Expenses'].astype(float).apply('${:,.0f}'.format)
 
-        df1['Most_Recent_Physical_Occupancy'] = df1['Most_Recent_Physical_Occupancy'].apply(clean_percent).astype(float).apply('{:.0f}%'.format)
+
+        df1['Occ'] = df1['Occ'].apply(clean_percent).astype(float).apply('{:.0f}%'.format)
 
         df1['EstRentableArea'] = df1['EstRentableArea'].astype(float).apply('{:,.0f}'.format)
 
         df1['lastSaleDate'] = pd.to_datetime(df1['lastSaleDate'], infer_datetime_format=True, errors="coerce")
         df1['lastSaleDate'] = df1['lastSaleDate'].dt.strftime('%Y-%m-%d')
+
+        # Formatting
+        df1['Preceding_Fiscal_Year_Revenue'].replace(["$nan","$0"], "-", inplace=True)
+        df1['Preceding_Fiscal_Year_Operating_Expenses'].replace(["$nan","$0"], "-", inplace=True)
+        df1['Occ'].replace(["0%"], "-", inplace=True)
 
         # Drop duplicates
         df1.drop_duplicates(subset=['Property_Name','Zip_Code','Year_Built'], inplace=True)
@@ -791,7 +862,12 @@ def update_map_deal(market, upside_dropdown, loan_dropdown, overlay, demo_dropdo
         propname = df1['Property_Name']
 
         # Columns for customdata
-        cd_cols = ['Property_Name','Address_Comp','Zip_Code','Size','Year_Built','Property_Type','zrent_quantile_random','zrent_median','Preceding_Fiscal_Year_Revenue','Preceding_Fiscal_Year_Operating_Expenses','Most_Recent_Physical_Occupancy','EstRentableArea','EstValue','Cap_Rate_Iss','Loan_Status','Deal_Type','Loan_Seller','PartyOwner1NameFull','lastSaleDate','lastSalePrice','upside_cat']
+        cd_cols = [
+                   'Property_Name','Address_Comp','Zip_Code','Size','Year_Built','Property_Type','zrent_quantile_random','zrent_median', \
+                   'Preceding_Fiscal_Year_Revenue','Preceding_Fiscal_Year_Operating_Expenses','Occ','EstRentableArea','EstValue','Cap_Rate_Iss', \
+                   'Loan_Status','Deal_Type','Loan_Seller','PartyOwner1NameFull','lastSaleDate','lastSalePrice','upside_cat','LTV_Iss','Issuer_DSCR', \
+                   'Amortization_Type','Original_Term','Remaining_Term','Interest_Rate','Interest_Rate_Type','IO_Period','OriginationDate','Maturity_Date' \
+                  ]
 
         datad.append({
 
@@ -838,8 +914,6 @@ def update_map_deal(market, upside_dropdown, loan_dropdown, overlay, demo_dropdo
         if mapdata is not None:
 
             if len(mapdata) > 1 and 'mapbox.center' in mapdata and 'mapbox.zoom' in mapdata:
-
-                print('demo dd mapdata', mapdata)
 
                 # set coords
                 coords[0] = mapdata['mapbox.center']['lat']
@@ -1083,6 +1157,29 @@ def update_map_deal(market, upside_dropdown, loan_dropdown, overlay, demo_dropdo
             label = "Price to Rent Ratio"
             geo_level = "census"
 
+        elif demo_dropdown == "Rent_Price_Ratio":
+
+            query = '''
+                    select ((zrent_median)*12)/(Median_Home_Value_2019) as rent_price_ratio, tract_geom, tract_ce, lsad_name
+                    from stroom_main.usgeodata_july_v1
+                    where MSA IN ('{}');
+                    '''.format(market)
+
+            dfc = pd.read_sql(query, con)
+            dfc =  dfc[dfc['tract_geom'].notna()]
+
+            dfc['tract_geom'] = dfc.tract_geom.apply(valid_geoms)
+            dfc = dfc[dfc['tract_geom'].notna()]
+
+            # Convert to GeoDataFrame
+            gdfc = gpd.GeoDataFrame(dfc, geometry='tract_geom', crs='epsg:4326')
+
+            gdfc['rent_price_ratio'] = gdfc['rent_price_ratio'].astype(float)
+            gdfc = gdfc[(gdfc['rent_price_ratio'] > 0) & (gdfc['rent_price_ratio'] < 500)]
+            s = gdfc['rent_price_ratio']
+            label = "Rent to Price Ratio"
+            geo_level = "census"
+
         elif demo_dropdown == "Bachelor":
 
             query = '''
@@ -1235,24 +1332,35 @@ def update_map_deal(market, upside_dropdown, loan_dropdown, overlay, demo_dropdo
 
         if loc_dropdown == "Transit":
             df_nearby = nearby_places(addr, loc_dropdown)
+            hovertext = df_nearby['name']
 
         elif loc_dropdown == "Grocery":
             df_nearby = nearby_places(addr, loc_dropdown)
+            hovertext = df_nearby['name']
 
         elif loc_dropdown == "School":
             df_nearby = nearby_places(addr, loc_dropdown)
 
+            # Concat name and rating
+            df_nearby['rating'] = df_nearby['rating'].astype(str)
+            df_nearby['school_name_rating'] = df_nearby[['name','rating']].apply(lambda x: ';'.join(x), axis=1)
+            hovertext = df_nearby['school_name_rating']
+
         elif loc_dropdown == "Hospital":
             df_nearby = nearby_places(addr, loc_dropdown)
+            hovertext = df_nearby['name']
 
         elif loc_dropdown == "Food/Cafe":
             df_nearby = nearby_places(addr, loc_dropdown)
+            hovertext = df_nearby['name']
 
         elif loc_dropdown == "Worship":
             df_nearby = nearby_places(addr, loc_dropdown)
+            hovertext = df_nearby['name']
 
         elif loc_dropdown == "Gas":
             df_nearby = nearby_places(addr, loc_dropdown)
+            hovertext = df_nearby['name']
 
         else:
             df_nearby = None
@@ -1268,14 +1376,13 @@ def update_map_deal(market, upside_dropdown, loan_dropdown, overlay, demo_dropdo
                    typ = sym_dict.get(i)
                    sym_list.append(typ)
 
-               print("datad loc dd")
                datad.append({
 
                               "type": "scattermapbox",
                               "lat": df_nearby["Lat"],
                               "lon": df_nearby["Lng"],
                               "name": "POI",
-                              "hovertext": df_nearby['name'],
+                              "hovertext": hovertext,
                               "showlegend": False,
                               "hoverinfo": "text",
                               "mode": "markers",
@@ -1395,11 +1502,13 @@ def update_map_deal(market, upside_dropdown, loan_dropdown, overlay, demo_dropdo
 
                         ],
                         [
-                            Input("market-deal", "value")
-                            #Input("show-properties-button", "n_clicks")
+                            Input("market-deal", "value"),
+                            Input("map-deal", "relayoutData")
                         ],
                      )
-def reset_selections(market):
+def reset_selections(market, mapdata):
+
+    print("mapdata", mapdata)
 
     ctx = dash.callback_context
 
@@ -1418,7 +1527,8 @@ def reset_selections(market):
                           [
                                # Modal Comps
                                Output("modal-1-deal","is_open"),
-                               Output("carousel_deal","children"),
+                               #Output("carousel_deal","children"),
+                               Output("streetview_deal","src"),
 
                                # Upside indicator
                                Output("card-text-deal", "children"),
@@ -1441,7 +1551,10 @@ def reset_selections(market):
                                Output("loan-seller_deal","children"),
                                Output("owner-info_deal","children"),
                                Output("sale-date_deal","children"),
-                               Output("sale-price_deal","children")
+                               Output("sale-price_deal","children"),
+                               Output("ltv_deal","children"),
+                               Output("dscr_deal","children"),
+                               Output("maturity_deal","children")
 
                           ],
 
@@ -1507,149 +1620,215 @@ def display_popup2(clickData, n_clicks, is_open, msa_store):
         lastSaleDate = clickData["points"][0]["customdata"][18]
         lastSalePrice = clickData["points"][0]["customdata"][19]
         upsideCat = clickData["points"][0]["customdata"][20]
+        ltv = clickData["points"][0]["customdata"][21]
+        dscr = clickData["points"][0]["customdata"][22]
+        maturityDate = clickData["points"][0]["customdata"][30]
 
         # Dictionary to pandas DataFrame
-        if msa_store:
-            df_msa = pd.DataFrame.from_dict(msa_store)
-            print("df msa", df_msa.shape)
+        # if msa_store:
+        #     df_msa = pd.DataFrame.from_dict(msa_store)
+        #     print("df msa", df_msa.shape)
+        #
+        #     # Construct a list of dictionaries
+        #     # Filter Pandas DataFrame
+        #     df = df_msa[df_msa['Property_Name'] == Name]
+        #
+        #     index = df.index[0]
+        #     img_dict = df['Image_dicts'][index]
+        # else:
+        #     img_dict = 0
 
-            # Construct a list of dictionaries
-            # Filter Pandas DataFrame
-            df = df_msa[df_msa['Property_Name'] == Name]
 
-            index = df.index[0]
-            img_dict = df['Image_dicts'][index]
-        else:
-            img_dict = 0
+        # # Construct carousel object
+        # try:
+        #
+        #     if type(img_dict) is str and img_dict != "0":
+        #
+        #         img_dict = ast.literal_eval(img_dict)
+        #
+        #         # Add labels for carousel items property
+        #         c = 1
+        #         img_list = []
+        #
+        #         # Make a call to obtain pre-signed urls of each object in S3
+        #         for key, values in img_dict.items():
+        #
+        #             for v in values:
+        #
+        #                 parts = os.path.split(v)
+        #
+        #                 url = create_presigned_url('gmaps-images-6771', 'property_images/{}'.format(parts[len(parts)-1]))
+        #
+        #                 # Create a list of dicts for carousel
+        #                 img_dict1 = {"key": c, "src": url, "img_style": {"width": "300px", "height": "300px"}}
+        #                 c = c + 1
+        #
+        #                 img_list.append(img_dict1)
+        #
+        #         carousel = dbc.Carousel(
+        #                                 items=img_list,
+        #                                 controls=True,
+        #                                 indicators=True,
+        #                    )
+        #
+        #     else:
+        #
+        #         # Get coordinates
+        #         lat, long = get_geocodes(Address)
+        #
+        #         '''
+        #         Static Streetview Images Code
+        #         '''
+        #         # Get updated name of the streetview image
+        #         # name = streetview(lat, long, 'streetview')
+        #         #
+        #         # # Construct URL
+        #         # url = create_presigned_url('gmaps-images-6771', 'property_images/{}'.format(name))
+        #         #
+        #         # if "None" in url:
+        #         #     url = create_presigned_url('gmaps-images-6771', 'property_images/no_imagery.png')
+        #
+        #         '''
+        #         Interactive Streetview Pano Image Code
+        #         '''
+        #         # Construct URL
+        #         url = "https://www.google.com/maps/embed/v1/streetview?key={}&location={},{}&heading=210&pitch=10&fov=35".format(gmaps_api, lat, long)
+        #         print("streetview", url)
+        #
+        #         carousel = dbc.Carousel(
+        #                                 items=[
+        #                                          {"key": "1", "src": url, "img_style": {"width": "300px", "height": "300px"}},
+        #                                 ],
+        #                                 controls=False,
+        #                                 indicators=False,
+        #                    )
+        #
+        # except Exception as e:
+        #     print('Exception', e)
+        #     url = create_presigned_url('gmaps-images-6771', 'property_images/no_imagery.png')
+        #
+        #     carousel = dbc.Carousel(
+        #                             items=[
+        #                                     {"key": "1", "src": url, "img_style": {"width": "300px", "height": "300px"}},
+        #                             ],
+        #                             controls=False,
+        #                             indicators=False,
+        #                 )
 
-
-        # Construct carousel object
-        try:
-
-            if type(img_dict) is str and img_dict != "0":
-
-                img_dict = ast.literal_eval(img_dict)
-
-                # Add labels for carousel items property
-                c = 1
-                img_list = []
-
-                # Make a call to obtain pre-signed urls of each object in S3
-                for key, values in img_dict.items():
-
-                    for v in values:
-
-                        parts = os.path.split(v)
-
-                        url = create_presigned_url('gmaps-images-6771', 'property_images/{}'.format(parts[len(parts)-1]))
-
-                        # Create a list of dicts for carousel
-                        img_dict1 = {"key": c, "src": url, "img_style": {"width": "300px", "height": "300px"}}
-                        c = c + 1
-
-                        img_list.append(img_dict1)
-
-                carousel = dbc.Carousel(
-                                        items=img_list,
-                                        controls=True,
-                                        indicators=True,
-                           )
-
-            else:
-
-                # Get coordinates
-                lat, long = get_geocodes(Address)
-
-                # Get updated name of the streetview image
-                name = streetview(lat, long, 'streetview')
-
-                # Construct URL
-                url = create_presigned_url('gmaps-images-6771', 'property_images/{}'.format(name))
-
-                if "None" in url:
-                    url = create_presigned_url('gmaps-images-6771', 'property_images/no_imagery.png')
-
-                carousel = dbc.Carousel(
-                                        items=[
-                                                 {"key": "1", "src": url, "img_style": {"width": "300px", "height": "300px"}},
-                                        ],
-                                        controls=False,
-                                        indicators=False,
-                           )
-
-        except Exception as e:
-            print('Exception', e)
-            url = create_presigned_url('gmaps-images-6771', 'property_images/no_imagery.png')
-
-            carousel = dbc.Carousel(
-                                    items=[
-                                            {"key": "1", "src": url, "img_style": {"width": "300px", "height": "300px"}},
-                                    ],
-                                    controls=False,
-                                    indicators=False,
-                        )
+        # Construct URL for Interactive Streetview Map
+        lat, long = get_geocodes(Address)
+        streetview_url = "https://www.google.com/maps/embed/v1/streetview?key={}&location={},{}&heading=180&pitch=10&fov=75".format(gmaps_api, lat, long)
 
         # Formatted Rent for default view (NA) and calculated / post button click and handling of None values
-        if upsideCat in ["null", None, 0, "0", 0.0, "0.0"]:
-            upsideCat_src = no_update
-            upsideCat_txt = no_update
-        elif upsideCat == "High":
-            upsideCat_src = "https://stroom-images.s3.us-west-1.amazonaws.com/high-growth.png"
-            upsideCat_txt = "High Upside Potential (> 25%+)"
-        elif upsideCat == "Medium":
-            upsideCat_src = "https://stroom-images.s3.us-west-1.amazonaws.com/average_chart.png"
-            upsideCat_txt = "Medium Upside Potential (10% - 25%)"
-        elif upsideCat == "Low":
+        try:
+
+            if upsideCat in ["null", None, 0, "0", 0.0, "0.0"]:
+                upsideCat_src = no_update
+                upsideCat_txt = no_update
+            elif upsideCat == "High":
+                upsideCat_src = "https://stroom-images.s3.us-west-1.amazonaws.com/high-growth.png"
+                upsideCat_txt = "High Upside Potential (> 25%+)"
+            elif upsideCat == "Medium":
+                upsideCat_src = "https://stroom-images.s3.us-west-1.amazonaws.com/average_chart.png"
+                upsideCat_txt = "Medium Upside Potential (10% - 25%)"
+            elif upsideCat == "Low":
+                upsideCat_src = "https://stroom-images.s3.us-west-1.amazonaws.com/low-growth.png"
+                upsideCat_txt = "Low Upside Potential (< 10%)"
+
+        except Exception as e:
+            print("Upside Cat Exception", e)
             upsideCat_src = "https://stroom-images.s3.us-west-1.amazonaws.com/low-growth.png"
             upsideCat_txt = "Low Upside Potential (< 10%)"
 
-        if Built in ["null", None, 0, "0", 0.0, "0.0"]:
-            Built_fmt = "N/A"
-        else:
-            Built_fmt = Built
+        try:
 
-        if Revenue in ["null", None, 0, "0", 0.0, "0.0"]:
-            Revenue_fmt = "N/A"
-        else:
-            Revenue = clean_currency(Revenue)
-            Revenue_fmt = "${:,.0f}".format(float(Revenue))
+            if Built in ["null", None, 0, "0", 0.0, "0.0", "-"]:
+                Built_fmt = "-"
+            else:
+                Built_fmt = Built
 
-        if Opex in ["null", None, 0, "0", 0.0, "0.0"]:
-            Opex_fmt = "N/A"
-        else:
-            Opex = clean_currency(Opex)
-            Opex_fmt = "${:,.0f}".format(float(Opex))
+        except Exception as e:
+            print("Year Built Exception", e)
+            Built_fmt = "-"
 
-        if Occupancy in ["null", None, 0, "0", 0.0, "0.0", "0%", "0.0%"]:
-            Occupancy_fmt = "N/A"
-        else:
-            Occupancy = clean_percent(Occupancy)
-            Occupancy = float(Occupancy)
-            Occupancy_fmt = "{:.0f}%".format(Occupancy)
+        try:
 
-        if RentArea in ["null", None, 0, "0", 0.0, "0.0"]:
-            RentArea_fmt = "N/A"
-        else:
-            RentArea = RentArea.replace(',','')
-            RentArea_fmt = "{:,.0f} sq.ft".format(float(RentArea))
+            if Revenue in ["null", None, 0, "0", 0.0, "0.0", "$nan", "$0", "-"]:
+                Revenue_fmt = "-"
+            else:
+                Revenue = clean_currency(Revenue)
+                Revenue_fmt = "${:,.0f}".format(float(Revenue))
 
-        if AssessedValue in ["null", None, 0, "0", 0.0, "0.0"]:
-            AssessedValue_fmt = "N/A"
-        elif type(AssessedValue) != str:
-            AssessedValue_fmt = "${:,.0f}".format(AssessedValue)
-        else:
-            AssessedValue_fmt = AssessedValue
+        except Exception as e:
+            print("Revenue Exception", e)
+            Revenue_fmt = "-"
 
-        if CapRate in ["null", None, 0, "0", 0.0, "0.0"]:
-            CapRate_fmt = "N/A"
-        elif type(CapRate) != str:
-            CapRate = CapRate * 100
-            CapRate_fmt = "{:,.2f}%".format(CapRate)
-        elif type(CapRate) == str:
-            CapRate = float(CapRate) * 100
-            CapRate_fmt = "{:,.2f}%".format(CapRate)
-        else:
-            CapRate_fmt = CapRate
+        try:
+
+            if Opex in ["null", None, 0, "0", 0.0, "0.0", "$0", "-"]:
+                Opex_fmt = "-"
+            else:
+                Opex = clean_currency(Opex)
+                Opex_fmt = "${:,.0f}".format(float(Opex))
+
+        except Exception as e:
+            print("Opex Exception", e)
+            Opex_fmt = "-"
+
+        try:
+
+            if Occupancy in ["null", None, 0, "0", 0.0, "0.0", "0%", "0.0%", "-"]:
+                Occupancy_fmt = "-"
+            else:
+                Occupancy = clean_percent(Occupancy)
+                Occupancy = float(Occupancy)
+                Occupancy_fmt = "{:.0f}%".format(Occupancy)
+
+        except Exception as e:
+            print("Occupancy Exception", e)
+            Occupancy_fmt = "-"
+
+        try:
+
+            if RentArea in ["null", None, 0, "0", 0.0, "0.0", "-"]:
+                RentArea_fmt = "-"
+            else:
+                RentArea = RentArea.replace(',','')
+                RentArea_fmt = "{:,.0f} sq.ft".format(float(RentArea))
+
+        except Exception as e:
+            print("Rent Area Exception", e)
+            RentArea_fmt = "-"
+
+        try:
+
+            if AssessedValue in ["null", None, 0, "0", 0.0, "0.0", "-"]:
+                AssessedValue_fmt = "N/A"
+            elif type(AssessedValue) != str:
+                AssessedValue_fmt = "${:,.0f}".format(AssessedValue)
+            else:
+                AssessedValue_fmt = AssessedValue
+
+        except Exception as e:
+            print("Assessed Value Exception", e)
+            AssessedValue_fmt = "-"
+
+        try:
+
+            if CapRate in ["null", None, 0, "0", 0.0, "0.0", "-"]:
+                CapRate_fmt = "N/A"
+            elif type(CapRate) != str:
+                CapRate = CapRate*100
+                CapRate_fmt = "{:,.2f}%".format(CapRate)
+            elif type(CapRate) == str:
+                CapRate = float(CapRate)*100
+                CapRate_fmt = "{:,.2f}%".format(CapRate)
+            else:
+                CapRate_fmt = CapRate*100
+
+        except Exception as e:
+            print("Cap Rate Exception", e)
+            CapRate_fmt = "-"
 
         if LoanStatus in ["null", None, 0, "0", 0.0, "0.0"]:
             LoanStatus_fmt = "N/A"
@@ -1688,7 +1867,30 @@ def display_popup2(clickData, n_clicks, is_open, msa_store):
         else:
             lastSalePrice_fmt = "N/A"
 
-        return(not is_open, carousel, upsideCat_txt, upsideCat_src, Name, Address, Size, Built_fmt, Property, Rents_fmt, Revenue_fmt, Opex_fmt, Occupancy_fmt, RentArea_fmt, AssessedValue_fmt, CapRate_fmt, LoanStatus_fmt, DealType_fmt, LoanSeller_fmt, OwnerInfo_fmt, lastSaleDate_fmt, lastSalePrice_fmt)
+        if ltv in ["null", None, 0, "0", 0.0, "0.0", " "]:
+            ltv_fmt = "N/A"
+        else:
+            try:
+                ltv_fmt = float(ltv) * 100
+                ltv_fmt = "{:.0f}%".format(ltv_fmt)
+            except Exception as e:
+                ltv_fmt = "N/A"
+
+        if dscr in ["null", None, 0, "0", 0.0, "0.0", " "]:
+            dscr_fmt = "N/A"
+        else:
+            try:
+                dscr = float(dscr)
+                dscr_fmt = "{:,.2f}".format(dscr)
+            except Exception as e:
+                dscr_fmt = "N/A"
+
+        if maturityDate in ["null", None, 0, "0", 0.0, "0.0"]:
+            maturityDate_fmt = "N/A"
+        else:
+            maturityDate_fmt = maturityDate.split(' ')[0]
+
+        return(not is_open, streetview_url, upsideCat_txt, upsideCat_src, Name, Address, Size, Built_fmt, Property, Rents_fmt, Revenue_fmt, Opex_fmt, Occupancy_fmt, RentArea_fmt, AssessedValue_fmt, CapRate_fmt, LoanStatus_fmt, DealType_fmt, LoanSeller_fmt, OwnerInfo_fmt, lastSaleDate_fmt, lastSalePrice_fmt, ltv_fmt, dscr_fmt, maturityDate_fmt)
 
     elif n_clicks:
         print('ok modal')

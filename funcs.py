@@ -190,6 +190,7 @@ def nearby_places(addr, type):
 
     # API call to get place ID
     result = gmaps.find_place(addr, input_type = "textquery", language="en")
+
     plc_id = result['candidates'][0]['place_id']
 
     # API to get place details
@@ -234,13 +235,15 @@ def nearby_places(addr, type):
 
         if nearby:
 
+            print(nearby)
+
             for i in range(len(nearby['results'])):
 
                 # Filter to include businesses currently operational
                 if nearby['results'][i].get('business_status') == 'OPERATIONAL':
 
                     # Filter dict to only contain geometry, name, types
-                    fdict = dict((k,v) for k, v in nearby['results'][i].items() if k in ['geometry','name','types'])
+                    fdict = dict((k,v) for k, v in nearby['results'][i].items() if k in ['geometry','name','types','rating'])
                     places_lst.append(fdict)
 
     else:
@@ -256,7 +259,7 @@ def nearby_places(addr, type):
                     if nearby['results'][i].get('business_status') == 'OPERATIONAL':
 
                        # Filter dict to only contain geometry, name, types
-                       fdict = dict((k,v) for k, v in nearby['results'][i].items() if k in ['geometry','name','types'])
+                       fdict = dict((k,v) for k, v in nearby['results'][i].items() if k in ['geometry','name','types','rating'])
                        places_lst.append(fdict)
 
     # check if list was populated with nearby places
