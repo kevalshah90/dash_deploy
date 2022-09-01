@@ -677,10 +677,12 @@ div#map-deal {
   font-weight: bold;
 }
 
-/* returns */
-.address-return-ig {
-
+.algo {
+  font-weight: bold;
 }
+
+/* returns */
+
 
 .return-table-style {
   padding: 38px 0px 0px 26px;

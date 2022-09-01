@@ -87,7 +87,7 @@ application.layout = html.Div([
                             dcc.Store(id="msa-prop-store", storage_type="local"),
 
                             # Store rent growth / Volatility in deals Tab
-                            dcc.Store(id="rg-store", storage_type="local")
+                            dcc.Store(id="geo-store", storage_type="local")
 
 
                             ],

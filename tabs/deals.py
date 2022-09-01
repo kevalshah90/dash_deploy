@@ -10,6 +10,7 @@ from dash.dependencies import Input, Output, State, ClientsideFunction
 from dash import dcc
 from dash import html, dash_table
 import dash_bootstrap_components as dbc
+import dash_daq as daq
 import plotly as py
 from plotly import graph_objs as go
 from plotly.graph_objs import *
@@ -274,7 +275,10 @@ layout = html.Div([
                            dbc.InputGroup(
                                [
 
-                                  dbc.Label("Add Layers", className = "layers"),
+                                  daq.BooleanSwitch(id='algo-mode-switch', label={"label":"Algorithm mode", "style":{"font-weight":"bold"}}, labelPosition="top", on=False),
+
+
+                                  dbc.Label("Data Layers", className = "layers"),
                                   dcc.Checklist(
                                                 id = "overlay",
                                                 options=[{'label':'Overlay', 'value':'overlay'}]
@@ -289,6 +293,8 @@ layout = html.Div([
                                                  options=[
                                                           {'label': 'Rent Growth', 'value': 'RentGrowth'},
                                                           {'label': 'Market Volatility', 'value': 'Volatility'},
+                                                          {'label': 'Construction Starts', 'value': 'Construction'},
+                                                          {'label': 'Economic Vitality', 'value': 'Viltality'},
                                                           {'label': 'Home Value', 'value': 'Home'},
                                                           {'label': 'Population', 'value': 'Pop'},
                                                           {'label': 'Income', 'value': 'Income'},
@@ -298,7 +304,9 @@ layout = html.Div([
                                                           {'label': 'Population change (%)', 'value': 'Pop-change'},
                                                           {'label': 'Home Value change (%)', 'value': 'Home-value-change'},
                                                           {'label': 'Bachelor\'s', 'value': 'Bachelor'},
-                                                          {'label': 'Graduate', 'value': 'Graduate'}
+                                                          {'label': 'Graduate', 'value': 'Graduate'},
+                                                          {'label': 'Traffic', 'value': 'Traffic'}
+
                                                  ],
                                                  value=""
 
@@ -377,13 +385,9 @@ layout = html.Div([
                                                 # Images
                                                 html.Iframe(
                                                             id = "streetview_deal",
-                                                            #src="https://www.google.com/maps/embed/v1/streetview?key=AIzaSyC0XCzdNwzI26ad9XXgwFRn2s7HrCWnCOk&location=37.3050709,-121.9756233&heading=210&pitch=10&fov=35",
-                                                            #src="https://www.google.com/maps/embed/v1/view?key=AIzaSyC0XCzdNwzI26ad9XXgwFRn2s7HrCWnCOk&center=-33.8569,151.2152&zoom=18&maptype=satellite",
                                                             referrerPolicy="no-referrer-when-downgrade",
                                                             style={"height": "400px", "width": "100%", "frameborder":"0", "border":"0"}
                                                            ),
-
-                                                #html.Div(id="carousel_deal"),
 
                                                 dbc.Card(
                                                     [
@@ -449,10 +453,6 @@ layout = html.Div([
                                                 dbc.Label("In-place Cap Rate:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
                                                 dbc.Label("Cap Rate:", id="cap-rate_deal", style={"float":"right"}),
                                                 html.Br(),
-
-                                                # html.Br(),
-                                                # dbc.Label("Loan Info", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
-                                                # html.Br(),
 
                                                 dbc.Label("Loan Status:", style={"color":"black", "font-weight": "bold", "margin-right":"10px"}),
                                                 dbc.Label("Loan Status:", id="loan-status_deal", style={"float":"right"}),
@@ -602,13 +602,13 @@ layout = html.Div([
 
                           # Map data storage component
                           Output("msa-prop-store", "data"),
-                          Output("rg-store", "data")
+                          Output("geo-store", "data")
 
                       ],
                       [
                           Input("market-deal", "value"),
                           Input("upside-deal", "value"),
-                          #Input("loan-deal", "value"),
+                          Input("algo-mode-switch", "on"),
                           Input("overlay", "value"),
                           Input("demo-deal", "value"),
                           Input("location-deal", "value"),
@@ -623,25 +623,23 @@ layout = html.Div([
                       ],
                       [
                           State("msa-prop-store", "data"),
-                          State("rg-store", "data")
+                          State("geo-store", "data")
                       ],
                       )
-def update_map_deal(market, upside_dropdown, overlay, demo_dropdown, loc_dropdown, year_built_min, year_built_max, num_units_min, num_units_max, cap_rate_min, cap_rate_max, mapdata, msa_store, rg_store):
+def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown, loc_dropdown, year_built_min, year_built_max, num_units_min, num_units_max, cap_rate_min, cap_rate_max, mapdata, msa_store, geo_store):
 
     # check for triggered inputs / states
     ctx = dash.callback_context
     print("triggered id", ctx.triggered_id)
+    print("triggered", ctx.triggered)
 
     coords = [0,0]
 
-    # Default layout - Continental USA
-    coords[0] = 37.0902
-    coords[1] = -95.7129
-    zoom = 3
-
-    if mapdata is not None:
+    if mapdata is not None and ctx.triggered[0]['prop_id'] == 'map-deal.relayoutData':
 
         if len(mapdata) > 1 and 'mapbox.center' in mapdata and 'mapbox.zoom' in mapdata:
+
+            print('set coords mapdata #1')
 
             # set coords
             coords[0] = mapdata['mapbox.center']['lat']
@@ -649,6 +647,24 @@ def update_map_deal(market, upside_dropdown, overlay, demo_dropdown, loc_dropdow
 
             # set zoom level
             zoom = mapdata['mapbox.zoom']
+
+        else:
+
+            print('set coords default #1')
+
+            # Default layout - Continental USA
+            coords[0] = 37.0902
+            coords[1] = -95.7129
+            zoom = 3
+
+    else:
+
+        print('set coords mapdata #2')
+
+        # Default layout - Continental USA
+        coords[0] = 37.0902
+        coords[1] = -95.7129
+        zoom = 3
 
     datad = []
 
@@ -679,6 +695,8 @@ def update_map_deal(market, upside_dropdown, overlay, demo_dropdown, loc_dropdow
     if market is not None and market in Market_List or ctx.triggered_id == 'market-deal' and ctx.triggered[0]['value'] in Market_List:
     #if ctx.triggered_id == 'market-deal' and ctx.triggered[0]['value'] in Market_List:
 
+        print('market selected - update map view')
+
         # Update market select flag
         msa_ctx = True
 
@@ -688,7 +706,9 @@ def update_map_deal(market, upside_dropdown, overlay, demo_dropdown, loc_dropdow
         zoom = 10
 
     # Reset to default coords when market cleared
-    elif market is None and market not in Market_List or ctx.triggered_id == 'market-deal' and ctx.triggered[0]['value'] == '':
+    elif market is None and market not in Market_List and ctx.triggered_id == 'market-deal' and ctx.triggered[0]['value'] == '':
+
+        print('market cleared - update map view to default')
 
         datad.clear()
         df_msa = pd.DataFrame({})
@@ -704,9 +724,7 @@ def update_map_deal(market, upside_dropdown, overlay, demo_dropdown, loc_dropdow
     if market is not None and market in Market_List or ctx.triggered_id == 'market-deal':
 
         # Market is selected, not triggered.
-        if mapdata is not None: #and ctx.triggered_id != 'market-deal' and ctx.triggered[0]['prop_id'] == 'map-deal.relayoutData':
-
-            #print('set coords market selected not triggered')
+        if mapdata is not None and ctx.triggered[0]['prop_id'] == 'map-deal.relayoutData': #and ctx.triggered_id != 'market-deal' and ctx.triggered[0]['prop_id'] == 'map-deal.relayoutData':
 
             if len(mapdata) > 1 and 'mapbox.center' in mapdata and 'mapbox.zoom' in mapdata:
 
@@ -813,24 +831,6 @@ def update_map_deal(market, upside_dropdown, overlay, demo_dropdown, loc_dropdow
             elif upside_dropdown == "30+":
                 df1 = df1[(df1['diff_potential'] > 25)]
 
-        # if loan_dropdown or ctx.triggered_id == "loan-deal":
-        #     if loan_dropdown == "Performing":
-        #         df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
-        #     elif loan_dropdown == "Paid in full":
-        #         df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
-        #     elif loan_dropdown == "Loss":
-        #         df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
-        #     elif loan_dropdown == "Significant Loss":
-        #         df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
-        #     elif loan_dropdown == "Performing, Watchlisted":
-        #         df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
-        #     elif loan_dropdown == "Paid in full, Defeased":
-        #         df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
-        #     elif loan_dropdown == "Performing, Specially Serviced":
-        #         df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
-        #     elif loan_dropdown == "Defeased":
-        #         df1 = df1[(df1['Loan_Status'] == loan_dropdown)]
-
         # Format columns
         df1['Zip_Code'] = df1['Zip_Code'].astype(float).apply('{:.0f}'.format)
         df1['Size'] = df1['Size'].astype(float).apply('{:.0f}'.format)
@@ -869,41 +869,65 @@ def update_map_deal(market, upside_dropdown, overlay, demo_dropdown, loc_dropdow
                    'Amortization_Type','Original_Term','Remaining_Term','Interest_Rate','Interest_Rate_Type','IO_Period','OriginationDate','Maturity_Date' \
                   ]
 
-        datad.append({
+        if algo_switch == True:
 
-                        "type": "scattermapbox",
-                        "lat": df1['Lat'],
-                        "lon": df1['Long'],
-                        "name": "Location",
-                        "hovertext": df1['Property_Name'],
-                        "showlegend": False,
-                        "hoverinfo": "text",
-                        "mode": "markers",
-                        "clickmode": "event+select",
-                        "customdata": df1.loc[:,cd_cols].values,
-                        "marker": {
-                            "autocolorscale": False,
-                            "showscale":True,
-                            "symbol": "circle",
-                            "size": 9,
-                            "opacity": 0.8,
-                            "color": df1['diff_potential'],
-                            "colorscale": "YlOrRd",
-                            "cmin": df1['diff_potential'].min(),
-                            "cmax": df1['diff_potential'].max(),
-                            "colorbar":dict(
-                                            title= 'Upside',
-                                            orientation= 'v',
-                                            side= 'left',
-                                            showticklabels=True,
-                                            thickness= 20,
-                                            tickformatstops=dict(dtickrange=[0,10]),
-                                            titleside= 'top',
-                                            ticks= 'outside'
-                                           )
+            datad.append({
+
+                            "type": "scattermapbox",
+                            "lat": df1['Lat'],
+                            "lon": df1['Long'],
+                            "name": "Location",
+                            "hovertext": df1['Property_Name'],
+                            "showlegend": False,
+                            "hoverinfo": "text",
+                            "mode": "markers",
+                            "clickmode": "event+select",
+                            "customdata": df1.loc[:,cd_cols].values,
+                            "marker": {
+                                "autocolorscale": False,
+                                "showscale":True,
+                                "symbol": "circle",
+                                "size": 10,
+                                "opacity": 0.8,
+                                "color": df1['diff_potential'],
+                                "colorscale": "YlOrRd",
+                                "cmin": df1['diff_potential'].min(),
+                                "cmax": df1['diff_potential'].max(),
+                                "colorbar":dict(
+                                                title= 'Upside',
+                                                orientation= 'v',
+                                                side= 'left',
+                                                showticklabels=True,
+                                                thickness= 20,
+                                                tickformatstops=dict(dtickrange=[0,10]),
+                                                titleside= 'top',
+                                                ticks= 'outside'
+                                               )
+                                }
+                         }
+            )
+
+        else:
+
+            datad.append({
+
+                                "type": "scattermapbox",
+                                "lat": df1['Lat'],
+                                "lon": df1['Long'],
+                                "name": "Location",
+                                "hovertext": df1['Property_Name'],
+                                "showlegend": False,
+                                "hoverinfo": "text",
+                                "mode": "markers",
+                                "clickmode": "event+select",
+                                "customdata": df1.loc[:,cd_cols].values,
+                                "marker": {
+                                    "symbol": "circle",
+                                    "size": 9,
+                                    "opacity": 0.8
+                                }
                             }
-                     }
-        )
+            )
 
 
     # Choroplethmapbox
@@ -939,9 +963,9 @@ def update_map_deal(market, upside_dropdown, overlay, demo_dropdown, loc_dropdow
                 df_rg['avg_rent_growth'] = round(df_rg['avg_rent_growth']*100,2)
 
             # Read from local memory / storage
-            elif rg_store is not None:
+            elif geo_store is not None:
 
-                df_rg = pd.DataFrame.from_dict(rg_store['RentGrowth'])
+                df_rg = pd.DataFrame.from_dict(geo_store['RentGrowth'])
 
             else:
                 df_rg = pd.DataFrame({})
@@ -974,9 +998,9 @@ def update_map_deal(market, upside_dropdown, overlay, demo_dropdown, loc_dropdow
 
                 df_rg['std_rent_growth'] = round(df_rg['std_rent_growth']*100,2)
 
-            elif rg_store is not None:
+            elif geo_store is not None:
 
-                df_rg = pd.DataFrame.from_dict(rg_store['Volatility'])
+                df_rg = pd.DataFrame.from_dict(geo_store['Volatility'])
 
             else:
 
@@ -992,6 +1016,104 @@ def update_map_deal(market, upside_dropdown, overlay, demo_dropdown, loc_dropdow
 
                 geo_level = "zip"
                 cscale = "Portland"
+
+        # New Construction
+        elif demo_dropdown == "Construction" or ctx.triggered[0]['value'] == 'Construction':
+
+            zoom = 13
+
+            if mapdata is not None:
+
+                if len(mapdata) > 1 and 'mapbox.center' in mapdata and 'mapbox.zoom' in mapdata:
+
+                    # set coords
+                    coords[0] = mapdata['mapbox.center']['lat']
+                    coords[1] = mapdata['mapbox.center']['lon']
+
+                    # set zoom level
+                    if ctx.triggered[0]['value'] == 'Construction' and mapdata['mapbox.zoom'] < 12:
+                        zoom = mapdata['mapbox.zoom'] + (12 - mapdata['mapbox.zoom'])
+                    else:
+                        zoom = mapdata['mapbox.zoom']
+
+            #if ctx.triggered[0]['value'] == 'Construction':
+            # Query permits data within x miles
+            query = '''
+                    select * from stroom_main.df_construction
+                    where st_distance_sphere(Point({},{}), coords) <= {};
+                    '''.format(coords[1], coords[0], 1609)
+
+            # To panads
+            df_construct = pd.read_sql(query, con)
+
+            # Not NaN
+            df_construct['value'] = df_construct['value'].apply(clean_currency)
+            df_construct = df_construct[(df_construct['value'].notna())]
+
+            # elif geo_store is not None:
+            #
+            #     for key, val in geo_store.items():
+            #
+            #         print("geo store dict keys", key)
+            #
+            #     df_construct = pd.DataFrame.from_dict(geo_store['Construction'])
+
+            # else:
+            #
+            #     df_construct = pd.DataFrame({})
+
+            # Not NA
+            df_construct = df_construct[(df_construct['Lat'].notna()) & (df_construct['Long'].notna())]
+
+            print("df construct", df_construct.shape)
+
+            # Check if DataFrame was returned
+            if df_construct is not None:
+                if isinstance(df_construct, pd.DataFrame) and df_construct.shape[0] > 0:
+
+                   # Concat name and rating
+                   df_construct['value'] = df_construct['value'].apply(clean_currency)
+                   df_construct['value'] = df_construct['value'].astype(float).apply('${:,.0f}'.format)
+                   df_construct['work_description'] = df_construct['work_description'].astype(str)
+
+                   df_construct['permit_desc'] = df_construct[['permit_type','value','work_description']].apply(lambda x: '; '.join(x), axis=1)
+                   hovertext = df_construct['permit_desc']
+
+                   # Create a list of symbols by dict lookup
+                   sym_list = []
+
+                   for i in df_construct['ConstType']:
+
+                       if i == "Residential":
+                           typ = sym_dict.get("Multi-Family")
+                       else:
+                           typ = sym_dict.get("Office")
+
+                       sym_list.append(typ)
+
+                   datad.append({
+
+                                  "type": "scattermapbox",
+                                  "lat": df_construct["Lat"],
+                                  "lon": df_construct["Long"],
+                                  "name": "Construction Starts",
+                                  "hovertext": hovertext,
+                                  "showlegend": False,
+                                  "hoverinfo": "text",
+                                  "mode": "markers",
+                                  "clickmode": "event+select",
+                                  "marker": {
+                                             "symbol": sym_list,
+                                             "size": 12,
+                                             "opacity": 0.6,
+                                             "color": "blue"
+                                            }
+                                  }
+                   )
+
+
+        # Economic vitality score
+
 
         elif demo_dropdown == "Home":
 
@@ -1226,6 +1348,40 @@ def update_map_deal(market, upside_dropdown, overlay, demo_dropdown, loc_dropdow
             label = "Graduate Degree"
             geo_level = "census"
 
+        elif demo_dropdown == "Traffic":
+
+            if ctx.triggered[0]['value'] == 'Traffic':
+                # Get Traffic tiles
+                query = '''
+                        select *
+                        from stroom_main.trafficDensity
+                        where MSA IN ('{}');
+                        '''.format(market)
+
+                dfc_tr = pd.read_sql(query, con)
+
+            elif geo_store is not None:
+
+                dfc_tr = pd.DataFrame.from_dict(geo_store['Traffic'])
+
+            else:
+
+                dfc_tr = pd.DataFrame({})
+
+            if dfc_tr.shape[0] > 0:
+                # To GeoPandas
+                dfc_tr['wktGeometry'] = dfc_tr.wktGeometry.apply(valid_geoms)
+                dfc_tr = dfc_tr[dfc_tr['wktGeometry'].notna()]
+
+                gdfc_tr = gpd.GeoDataFrame(dfc_tr, geometry='wktGeometry', crs='epsg:4326')
+
+                gdfc_tr['traversals'] = gdfc_tr['traversals'].astype(float)
+                gdfc_tr = gdfc_tr[gdfc_tr['traversals'] > 0]
+                s = gdfc_tr['traversals']
+                label = "Traffic Density"
+                geo_level = "hex"
+
+
         # Clear scattermapbox - properties layer
         if not overlay:
             datad.clear()
@@ -1303,6 +1459,46 @@ def update_map_deal(market, upside_dropdown, overlay, demo_dropdown, loc_dropdow
                             "opacity": 0.2,
                             "labels": label,
                             "title": "Choropleth - Zip Code Level"
+
+                         }
+            )
+
+        elif geo_level == "hex":
+
+            zoom = 14
+
+            datad.append({
+
+                            "type": "choroplethmapbox",
+                            "geojson": gdfc_tr.__geo_interface__,
+                            "locations": gdfc_tr['hexid'],
+                            "z": s,
+                            "featureidkey": "properties.hexid",
+                            #"hovertext": gdfc_tr['traversals'],
+                            "autocolorscale": False,
+                            "colorscale":"Viridis",
+                            "colorbar":dict(
+                                            title = dict(text=label,
+                                                         font=dict(size=12)
+                                                        ),
+                                            orientation = 'v',
+                                            x= -0.15,
+                                            xanchor= "left",
+                                            y= 0,
+                                            yanchor= "bottom",
+                                            showticklabels=True,
+                                            thickness= 20,
+                                            titleside= 'top',
+                                            ticks= 'outside',
+                                            font = dict(size=12)
+                                           ),
+                            "zmin": s.min(),
+                            "zmax": s.quantile(0.75),
+                            "marker": dict(opacity = 0.6),
+                            "marker_line_width": 0,
+                            "opacity": 0.2,
+                            "labels": label,
+                            "title": "Choropleth - Hex"
 
                          }
             )
@@ -1410,7 +1606,7 @@ def update_map_deal(market, upside_dropdown, overlay, demo_dropdown, loc_dropdow
                      },
                      "pitch": 0,
                      "zoom": zoom,
-                     "style": "streets",
+                     "style": "light",
 
                  },
 
@@ -1452,6 +1648,19 @@ def update_map_deal(market, upside_dropdown, overlay, demo_dropdown, loc_dropdow
                 df_rg['geom'] = df_rg.geom.apply(lambda x: wkt.dumps(x))
 
                 demo_store = {demo_dropdown : df_rg.to_dict("records")}
+
+            elif demo_dropdown in ['Traffic']:
+                # Polygon to strings
+                dfc_tr['wktGeometry'] = dfc_tr.wktGeometry.apply(lambda x: wkt.dumps(x))
+
+                demo_store = {demo_dropdown : dfc_tr.to_dict("records")}
+
+            # elif demo_dropdown in ['Construction']:
+            #
+            #     df_construct.drop(columns=['permit_desc'], axis=1, inplace=True)
+            #
+            #     demo_store = {demo_dropdown : df_construct.to_dict("records")}
+
             else:
                 demo_store = no_update
 
@@ -1479,8 +1688,8 @@ def update_map_deal(market, upside_dropdown, overlay, demo_dropdown, loc_dropdow
                             Output("upside-deal", "value"),
                             Output("upside-deal", "disabled"),
 
-                            Output("loan-deal", "value"),
-                            Output("loan-deal", "disabled"),
+                            #Output("loan-deal", "value"),
+                            #Output("loan-deal", "disabled"),
 
                             Output("overlay", "value"),
 
@@ -1516,9 +1725,9 @@ def reset_selections(market, mapdata):
 
     # Disable filters until market is selected
     if market is None or ctx.triggered_id == "market-deal" and ctx.triggered[0]['value'] == '':
-        return ("", True, "", True, "", "", True, "", True, "", True, "", True, "", True, "", True)
+        return ("", True, "", "", True, "", True, "", True, "", True, "", True, "", True)
     else:
-        return (no_update, False, no_update, False, no_update, no_update, False, no_update, False, no_update, False, no_update, False, no_update, False, no_update, False)
+        return (no_update, False, no_update, no_update, False, no_update, False, no_update, False, no_update, False, no_update, False, no_update, False)
 
 
 
