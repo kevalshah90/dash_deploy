@@ -76,6 +76,8 @@ query = '''
 
 df = pd.read_sql(query, con)
 
+con.close()
+
 # App Layout for designing the page and adding elements
 layout = html.Div([
 
@@ -760,6 +762,8 @@ def autopopulate_propdetails(address, is_open):
 
     if geojson:
 
+        con = engine.connect()
+
         # Query to find property in the database - 0.12 miles to meters = 193
         query = '''
                 select * from stroom_main.df_raw_july
@@ -767,6 +771,8 @@ def autopopulate_propdetails(address, is_open):
                 '''.format(geojson['lng'], geojson['lat'], 193)
 
         df_mf = pd.read_sql(query, con)
+
+        con.close()
 
         # Check if dataframe is not empty and property was found
         if df_mf.shape[0] > 0:
@@ -1013,6 +1019,8 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
 
            geohashval = gh.encode(geojson['lat'], geojson['lng'], precision=5)
 
+           con = engine.connect()
+
            query = '''
                    SELECT *
                    FROM stroom_main.df_raw_july
@@ -1020,6 +1028,8 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
                    '''.format(geojson['lng'], geojson['lat'], 10*1609)
 
            df_mf = pd.read_sql(query, con)
+
+           con.close()
 
            #print("Fiscal Revenue", df_mf['Preceding_Fiscal_Year_Revenue'])
 

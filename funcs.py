@@ -384,7 +384,7 @@ def attom_api_avalue(address):
 
     headers = {
         'accept': "application/json",
-        'apikey': "407cbd2300b77764311ed005c9d94376",
+        'apikey': "6a7b334979eda21d680d71ba588cdaa6",
         }
 
     addr = urllib.parse.quote(address)

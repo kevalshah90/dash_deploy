@@ -61,13 +61,6 @@ host =  'aa1jp4wsh8skxvw.csl5a9cjrheo.us-west-1.rds.amazonaws.com'
 port = 3306
 database = 'stroom_main'
 engine = create_engine("mysql+pymysql://{}:{}@{}/{}".format(user,pwd,host,database))
-con = engine.connect()
-
-# def valid_geoms(x):
-#     try:
-#         return wkt.loads(x)
-#     except:
-#         return np.nan
 
 #Query GeoData
 try:
@@ -83,6 +76,8 @@ try:
            'Austin-Round Rock, TX MSA'
     )
 
+    con = engine.connect()
+    print('sql connection open')
     query = '''
             select distinct MSA
             from stroom_main.df_raw_july
@@ -90,6 +85,10 @@ try:
             '''.format(msa)
 
     df_market = pd.read_sql(query, con)
+    print('sql connection closed')
+    con.close()
+
+    con = engine.connect()
 
     query = '''
             select distinct Loan_Status
@@ -98,6 +97,8 @@ try:
             '''.format(msa)
 
     df_loan = pd.read_sql(query, con)
+
+    con.close()
 
     Market_List = list(df_market['MSA'].unique())
     LoanStatus_List = list(df_loan['Loan_Status'].unique())
@@ -153,8 +154,8 @@ layout = html.Div([
                                               persistence_type="memory",
                                               options=[
                                                        {'label': '0%-10%', 'value': '0-10'},
-                                                       {'label': '10%-30%', 'value': '10-30'},
-                                                       {'label': '30%+', 'value': '30+'},
+                                                       {'label': '10%-25%', 'value': '10-25'},
+                                                       {'label': '25%+', 'value': '25+'},
 
                                               ],
                                               placeholder="Select"
@@ -275,16 +276,15 @@ layout = html.Div([
                            dbc.InputGroup(
                                [
 
-                                  daq.BooleanSwitch(id='algo-mode-switch', label={"label":"Algorithm mode", "style":{"font-weight":"bold"}}, labelPosition="top", on=False),
+                                  daq.BooleanSwitch(id='algo-mode-switch', label={"label":"Upside Algorithm", "style":{"font-weight":"bold"}}, labelPosition="top", on=False),
 
-
-                                  dbc.Label("Data Layers", className = "layers"),
                                   dcc.Checklist(
                                                 id = "overlay",
                                                 options=[{'label':'Overlay', 'value':'overlay'}]
                                   ),
 
-                                  dbc.Label("Demographics"),
+                                  dbc.Label("Data Layers", className = "layers"),
+                                  #dbc.Label("Demographics"),
                                   dcc.Dropdown(
 
                                                  id="demo-deal",
@@ -293,16 +293,17 @@ layout = html.Div([
                                                  options=[
                                                           {'label': 'Rent Growth', 'value': 'RentGrowth'},
                                                           {'label': 'Market Volatility', 'value': 'Volatility'},
+                                                          {'label': 'Job Growth', 'value': 'JobGrowth'},
                                                           {'label': 'Construction Starts', 'value': 'Construction'},
-                                                          {'label': 'Economic Vitality', 'value': 'Viltality'},
+                                                          {'label': 'Economic Vitality', 'value': 'Vitality'},
                                                           {'label': 'Home Value', 'value': 'Home'},
                                                           {'label': 'Population', 'value': 'Pop'},
                                                           {'label': 'Income', 'value': 'Income'},
                                                           {'label': 'Price-Rent Ratio', 'value': 'Price_Rent_Ratio'},
                                                           {'label': 'Rent-Price Ratio', 'value': 'Rent_Price_Ratio'},
-                                                          {'label': 'Income change (%)', 'value': 'Income-change'},
-                                                          {'label': 'Population change (%)', 'value': 'Pop-change'},
-                                                          {'label': 'Home Value change (%)', 'value': 'Home-value-change'},
+                                                          {'label': 'Income change', 'value': 'Income-change'},
+                                                          {'label': 'Population change', 'value': 'Pop-change'},
+                                                          {'label': 'Home Value change', 'value': 'Home-value-change'},
                                                           {'label': 'Bachelor\'s', 'value': 'Bachelor'},
                                                           {'label': 'Graduate', 'value': 'Graduate'},
                                                           {'label': 'Traffic', 'value': 'Traffic'}
@@ -532,9 +533,11 @@ layout = html.Div([
                                              {"id":"Preceding_Fiscal_Year_Operating_Expenses", "name":"Fiscal Opex"},
                                              {"id":"Occ", "name":"Occupancy"},
                                              {"id":"zrent_median", "name": "Rent (Median)"},
+                                             {'id':"diff_potential", "name":"Upside"},
+                                             #{'id':"avg_rent_growth", "name": "Avg. Rent Growth M/M%"},
                                              {'id':"EstValue", "name":"Assessed Value"},
                                              {'id':"Loan_Status", "name":"Loan Status"},
-                                             {'id':"lastSaleDate", "name":"Last Sale Date"}],
+                                             {'id':"lastSaleDate", "name":"Sale Date"}],
 
                                     style_cell={
                                         "fontFamily": "Arial",
@@ -602,7 +605,8 @@ layout = html.Div([
 
                           # Map data storage component
                           Output("msa-prop-store", "data"),
-                          Output("geo-store", "data")
+                          Output("geo-store", "data"),
+                          Output("coords-store", "data")
 
                       ],
                       [
@@ -623,23 +627,26 @@ layout = html.Div([
                       ],
                       [
                           State("msa-prop-store", "data"),
-                          State("geo-store", "data")
+                          State("geo-store", "data"),
+                          State("coords-store", "data")
                       ],
                       )
-def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown, loc_dropdown, year_built_min, year_built_max, num_units_min, num_units_max, cap_rate_min, cap_rate_max, mapdata, msa_store, geo_store):
+def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown, loc_dropdown, year_built_min, year_built_max, num_units_min, num_units_max, cap_rate_min, cap_rate_max, mapdata, msa_store, geo_store, coords_store):
 
     # check for triggered inputs / states
     ctx = dash.callback_context
     print("triggered id", ctx.triggered_id)
     print("triggered", ctx.triggered)
 
-    coords = [0,0]
+    if coords_store is None:
+        coords = [0,0]
+    else:
+        coords = [coords_store['lat'], coords_store['lon']]
 
+    # map triggered
     if mapdata is not None and ctx.triggered[0]['prop_id'] == 'map-deal.relayoutData':
 
         if len(mapdata) > 1 and 'mapbox.center' in mapdata and 'mapbox.zoom' in mapdata:
-
-            print('set coords mapdata #1')
 
             # set coords
             coords[0] = mapdata['mapbox.center']['lat']
@@ -648,7 +655,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
             # set zoom level
             zoom = mapdata['mapbox.zoom']
 
-        else:
+        elif market not in Market_List or ctx.triggered_id == 'market-deal' and ctx.triggered[0]['value'] == '':
 
             print('set coords default #1')
 
@@ -657,14 +664,14 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
             coords[1] = -95.7129
             zoom = 3
 
-    else:
-
-        print('set coords mapdata #2')
+    # set default coords
+    elif market not in Market_List or ctx.triggered_id == 'market-deal' and ctx.triggered[0]['value'] == '':
 
         # Default layout - Continental USA
         coords[0] = 37.0902
         coords[1] = -95.7129
         zoom = 3
+
 
     datad = []
 
@@ -692,8 +699,8 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
     # Set flag to check if market is triggered
     msa_ctx = False
 
-    if market is not None and market in Market_List or ctx.triggered_id == 'market-deal' and ctx.triggered[0]['value'] in Market_List:
-    #if ctx.triggered_id == 'market-deal' and ctx.triggered[0]['value'] in Market_List:
+    #if market is not None and market in Market_List or ctx.triggered_id == 'market-deal' and ctx.triggered[0]['value'] in Market_List:
+    if ctx.triggered_id == 'market-deal' and ctx.triggered[0]['value'] in Market_List and market in Market_List:
 
         print('market selected - update map view')
 
@@ -721,6 +728,46 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
         coords[1] = -95.7129
         zoom = 3
 
+    if market is not None and market in Market_List and ctx.triggered[0]['prop_id'] == "algo-mode-switch.on" and ctx.triggered[0]['value'] == True:
+
+        print('market selected - algo mode on')
+
+        # Update market select flag
+        msa_ctx = True
+
+        lat, long = get_geocodes(market.split('-')[0] + ' ,United States')
+        coords[0] = lat
+        coords[1] = long
+        zoom = 10
+
+    elif market is not None and market in Market_List and ctx.triggered[0]['prop_id'] == "algo-mode-switch.on" and ctx.triggered[0]['value'] == False:
+
+        print('market selected - algo mode off')
+
+        # Update market select flag
+        msa_ctx = True
+
+        lat, long = get_geocodes(market.split('-')[0] + ' ,United States')
+        coords[0] = lat
+        coords[1] = long
+        zoom = 10
+
+    # Recenter - overlay and demo None
+
+    if isinstance(ctx.triggered[0]['value'], list) == True and len(list(ctx.triggered[0]['value'])) > 0:
+
+        if market not in [None, ""] and ctx.triggered[0]['prop_id'] == "overlay.value" and ctx.triggered[0]['value'][0] == "overlay":
+
+            print('market selected - overlay')
+
+            # Update market select flag
+            msa_ctx = True
+
+            lat, long = get_geocodes(market.split('-')[0] + ' ,United States')
+            coords[0] = lat
+            coords[1] = long
+            zoom = 10
+
     if market is not None and market in Market_List or ctx.triggered_id == 'market-deal':
 
         # Market is selected, not triggered.
@@ -735,7 +782,10 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                 # set zoom level
                 zoom = mapdata['mapbox.zoom']
 
+
         # Find properties within 10 mile radius
+        con = engine.connect()
+
         query = '''
                 select Property_Name,
                        Property_Type,
@@ -779,6 +829,8 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
         df_msa = pd.read_sql(query, con)
 
+        con.close()
+
     # check previously queried from datastore
     #elif msa_ctx == False and msa_store:
     #    print('msa store')
@@ -792,18 +844,18 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
     # Apply filters
     if df_msa.shape[0] > 0:
 
-        if year_built_max and year_built_min is not None:
-            if year_built_min.isnumeric() and year_built_max.isnumeric() and ctx.triggered_id in ["year-built-min", "year-built-max"]:
+        if year_built_max and year_built_min is not None and len(year_built_min) == 4 and len(year_built_max) == 4:
+            if year_built_min.isnumeric() and year_built_max.isnumeric(): #and ctx.triggered_id in ["year-built-min", "year-built-max"]:
                 df_msa['Year_Built'] = df_msa['Year_Built'].astype(float).astype(int)
                 df_msa = df_msa[(df_msa['Year_Built'] >= int(year_built_min)) & (df_msa['Year_Built'] <= int(year_built_max))]
 
-        if num_units_min and num_units_max is not None:
-            if num_units_min.isnumeric() and num_units_max.isnumeric() and ctx.triggered_id in ["num-units-min", "num-units-max"]:
+        if num_units_min and num_units_max is not None and len(num_units_min) > 0 and len(num_units_max) > 0:
+            if num_units_min.isnumeric() and num_units_max.isnumeric(): #and ctx.triggered_id in ["num-units-min", "num-units-max"]:
                 df_msa['Size'] = df_msa['Size'].astype(float).astype(int)
                 df_msa = df_msa[(df_msa['Size'] >= int(num_units_min)) & (df_msa['Size'] <= int(num_units_max))]
 
-        if cap_rate_min and cap_rate_max is not None:
-            if cap_rate_min.isnumeric() and cap_rate_max.isnumeric() and ctx.triggered_id in ["cap-rate-min", "cap-rate-max"]:
+        if cap_rate_min and cap_rate_max is not None and len(cap_rate_min) > 0 and len(cap_rate_max) > 0:
+            if cap_rate_min.isnumeric() and cap_rate_max.isnumeric(): #and ctx.triggered_id in ["cap-rate-min", "cap-rate-max"]:
                 df_msa['Cap_Rate_Iss'] = df_msa['Cap_Rate_Iss'].astype(float)
                 df_msa['Cap_Rate_Iss'] = df_msa['Cap_Rate_Iss']*100
                 df_msa = df_msa[(df_msa['Cap_Rate_Iss'] >= float(cap_rate_min)) & (df_msa['Cap_Rate_Iss'] <= float(cap_rate_max))]
@@ -824,12 +876,13 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
         # User upside filter
         if upside_dropdown or ctx.triggered_id == "upside-deal":
-            if upside_dropdown == "0-10":
-                df1 = df1[(df1['diff_potential'] >= 0) & (df1['diff_potential'] <= 9)]
-            elif upside_dropdown == "10-30":
-                df1 = df1[(df1['diff_potential'] >= 10) & (df1['diff_potential'] <= 25)]
-            elif upside_dropdown == "30+":
-                df1 = df1[(df1['diff_potential'] > 25)]
+            if algo_switch == True or ctx.triggered[0]['prop_id'] == "algo-mode-switch.on" and ctx.triggered[0]['value'] == True:
+                if upside_dropdown == "0-10":
+                    df1 = df1[(df1['diff_potential'] >= 0) & (df1['diff_potential'] <= 9)]
+                elif upside_dropdown == "10-25":
+                    df1 = df1[(df1['diff_potential'] >= 10) & (df1['diff_potential'] <= 25)]
+                elif upside_dropdown == "25+":
+                    df1 = df1[(df1['diff_potential'] > 25)]
 
         # Format columns
         df1['Zip_Code'] = df1['Zip_Code'].astype(float).apply('{:.0f}'.format)
@@ -855,8 +908,53 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
         df1['Preceding_Fiscal_Year_Operating_Expenses'].replace(["$nan","$0"], "-", inplace=True)
         df1['Occ'].replace(["0%"], "-", inplace=True)
 
-        # Drop duplicates
-        df1.drop_duplicates(subset=['Property_Name','Zip_Code','Year_Built'], inplace=True)
+        # '''
+        # Append Rent Growth Column
+        # '''
+        # con = engine.connect()
+        #
+        # query = '''
+        #         select MsaName, zip_code, AVG(pct_change) AS avg_rent_growth, ST_AsText(geometry) as geom
+        #         from stroom_main.gdf_rent_growth_july
+        #         GROUP BY MsaName, zip_code, geometry
+        #         HAVING st_distance_sphere(Point({},{}), ST_Centroid(geometry)) <= {};
+        #         '''.format(coords[1], coords[0], 1609*25)
+        #
+        # df_rg = pd.read_sql(query, con)
+        #
+        # # Spatial Join
+        #
+        # # Create geopandas DF
+        # df_rg['geom'] = gpd.GeoSeries.from_wkt(df_rg['geom'])
+        # df_rg_gpd = gpd.GeoDataFrame(df_rg, geometry='geom')
+        # # set crs for buffer calculations
+        # df_rg_gpd.set_crs("ESRI:102003", inplace=True)
+        #
+        # # Create geopandas DF
+        # df1_gpd = gpd.GeoDataFrame(df1, geometry=gpd.points_from_xy(df1['Long'], df1['Lat']))
+        # # set crs for buffer calculations
+        # df1_gpd.set_crs("ESRI:102003", inplace=True)
+        #
+        #
+        # df_gpd = gpd.sjoin_nearest(
+        #                            df1_gpd,
+        #                            df_rg_gpd[['avg_rent_growth','geom']],
+        #                            how='left'
+        #                           )
+        #
+        # # To Pandas
+        # df1 = pd.DataFrame(df_gpd)
+
+        # Format Columns
+        df1['diff_potential'] = df1['diff_potential'].astype(float).apply('{:,.0f}%'.format)
+        #df1['avg_rent_growth'] = df1['avg_rent_growth']*100
+        #df1['avg_rent_growth'] = df1['avg_rent_growth'].astype(float).apply('{:,.2f}%'.format)
+
+        # Drop duplicates and columns
+        #df1.drop(columns=['geometry'], axis=1, inplace=True)
+        df1.drop_duplicates(subset=['Property_Name','Zip_Code','Year_Built','lastSaleDate'], inplace=True)
+
+        print("df1 shape", df1.shape)
 
         # Hover Info
         propname = df1['Property_Name']
@@ -869,7 +967,9 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                    'Amortization_Type','Original_Term','Remaining_Term','Interest_Rate','Interest_Rate_Type','IO_Period','OriginationDate','Maturity_Date' \
                   ]
 
-        if algo_switch == True:
+        if algo_switch == True or ctx.triggered[0]['prop_id'] == "algo-mode-switch.on" and ctx.triggered[0]['value'] == True:
+
+            df1['diff_potential'] = df1['diff_potential'].apply(clean_percent).astype(float)
 
             datad.append({
 
@@ -935,9 +1035,15 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
         geo_level = None
 
-        if mapdata is not None:
+        zoom = 10
+
+        if mapdata is not None and ctx.triggered[0]['prop_id'] == 'map-deal.relayoutData':
 
             if len(mapdata) > 1 and 'mapbox.center' in mapdata and 'mapbox.zoom' in mapdata:
+
+                print("dd mapdata", mapdata)
+
+                print('demo dropdown - set coords')
 
                 # set coords
                 coords[0] = mapdata['mapbox.center']['lat']
@@ -949,18 +1055,34 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
         if demo_dropdown == "RentGrowth":
 
             if ctx.triggered[0]['value'] == 'RentGrowth':
+
+                con = engine.connect()
+
                 # Query rental growth data
                 query = '''
-                        select MsaName, zip_code, AVG(pct_change) AS avg_rent_growth, ST_AsText(geometry) as geom
-                        from stroom_main.gdf_rent_growth_july
-                        GROUP BY MsaName, zip_code, geometry
-                        HAVING st_distance_sphere(Point({},{}), ST_Centroid(geometry)) <= {};
+                        with cte as (
+                          select
+                            MsaName,
+                            zip_code,
+                            rents,
+                            geometry,
+                            lag(rents) over(partition by MsaName, zip_code order by `Year`) as lvalue,
+                            row_number() over(partition by MsaName, zip_code order by `Year` desc) as rn
+                          from gdf_rent_growth_july
+                        )
+                        select MsaName, zip_code, (rents/lvalue - 1) as avg_rent_growth, ST_Astext(geometry) as geom
+                        from cte
+                        where rn = 1
+                        and lvalue is not null
+                        and st_distance_sphere(Point({},{}), ST_Centroid(`geometry`)) <= {};
                         '''.format(coords[1], coords[0], 1609*25)
 
                 # To pandas
                 df_rg = pd.read_sql(query, con)
 
-                df_rg['avg_rent_growth'] = round(df_rg['avg_rent_growth']*100,2)
+                con.close()
+
+                #df_rg['avg_rent_growth'] = round(df_rg['avg_rent_growth']*100,2)
 
             # Read from local memory / storage
             elif geo_store is not None:
@@ -975,7 +1097,9 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                 df_rg['geom'] = gpd.GeoSeries.from_wkt(df_rg['geom'])
                 gdf_rg = gpd.GeoDataFrame(df_rg, geometry='geom')
 
-                s = gdf_rg['avg_rent_growth'].astype(float)
+                gdf_rg['avg_rent_growth'] = gdf_rg['avg_rent_growth'].astype(float)
+
+                s = round(gdf_rg['avg_rent_growth']*100, 2)
                 label = "Rent Growth (% YoY)"
 
                 geo_level = "zip"
@@ -985,6 +1109,9 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
         elif demo_dropdown == "Volatility":
 
             if ctx.triggered[0]['value'] == 'Volatility':
+
+                con = engine.connect()
+
                 # Query rental growth data
                 query = '''
                         select MsaName, zip_code, STD(pct_change) AS std_rent_growth, ST_AsText(geometry) as geom
@@ -995,6 +1122,8 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
                 # To panads
                 df_rg = pd.read_sql(query, con)
+
+                con.close()
 
                 df_rg['std_rent_growth'] = round(df_rg['std_rent_growth']*100,2)
 
@@ -1017,14 +1146,148 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                 geo_level = "zip"
                 cscale = "Portland"
 
+        # Job Growth
+        if demo_dropdown == "JobGrowth":
+
+            zoom = 12
+
+            if ctx.triggered[0]['value'] == 'JobGrowth':
+
+                con = engine.connect()
+
+                # Query job growth data
+                query = '''
+                        select year, period, periodName, value, area_code, area_name, ST_AsText(geom) as geom
+                        from stroom_main.df_bls_geo
+                        where st_distance_sphere(Point({},{}), ST_Centroid(geom)) <= {};
+                        '''.format(coords[1], coords[0], 1609*250)
+
+                # To pandas
+                df_job = pd.read_sql(query, con)
+
+                con.close()
+
+            # Read from local memory / storage
+            elif geo_store is not None:
+
+                df_job = pd.DataFrame.from_dict(geo_store['JobGrowth'])
+
+            else:
+                df_job = pd.DataFrame({})
+
+            if df_job.shape[0] > 0:
+                # To GeoPandas
+                df_job['geom'] = gpd.GeoSeries.from_wkt(df_job['geom'])
+                df_job = gpd.GeoDataFrame(df_job, geometry='geom')
+
+                s = df_job['value'].astype(float)
+
+                label = "Job Growth (% YoY)"
+
+                cscale = "Portland"
+
+                datad.append({
+
+                                "type": "choroplethmapbox",
+                                "geojson": df_job.__geo_interface__,
+                                "locations": df_job['area_code'],
+                                "z": s,
+                                "featureidkey": "properties.area_code",
+                                "hovertext": df_job['area_name'],
+                                "autocolorscale":False,
+                                "colorscale": cscale,
+                                "colorbar":dict(
+                                                title = dict(text=label,
+                                                             font=dict(size=12)
+                                                            ),
+                                                orientation = 'v',
+                                                x= -0.15,
+                                                xanchor= "left",
+                                                y= 0,
+                                                yanchor= "bottom",
+                                                showticklabels=True,
+                                                thickness= 20,
+                                                tickformatstops=dict(dtickrange=[0,10]),
+                                                titleside= 'top',
+                                                ticks= 'outside'
+                                               ),
+                                "zmin": s.min(),
+                                "zmax": s.max(),
+                                "marker": dict(opacity = 0.6),
+                                "marker_line_width": 0,
+                                "opacity": 0.2,
+                                "labels": label,
+                                "title": "Choropleth - Job Growth"
+
+                             }
+                )
+
+
+        # Economic Vitality
+        elif demo_dropdown == "Vitality":
+
+            if ctx.triggered[0]['value'] == 'Vitality':
+
+                con = engine.connect()
+
+                query = '''
+                        select Year, value, permit_count, geohash, ST_AsText(geohash_center) as geohash_center, ST_AsText(geometry) as geom
+                        from stroom_main.df_econ_vitality
+                        where st_distance_sphere(Point({},{}), geohash_center) <= {};
+                        '''.format(coords[1], coords[0], 1609*30)
+
+                df_econ_vitality = pd.read_sql(query, con)
+
+                con.close()
+
+                df_econ_vitality['geom'] = df_econ_vitality.geom.apply(valid_geoms)
+                df_econ_vitality = df_econ_vitality[df_econ_vitality['geom'].notna()]
+
+                # Format value
+                df_econ_vitality['value'] = df_econ_vitality['value'].apply(clean_currency).astype(float)
+
+                df_econ_vitality_v1 = df_econ_vitality.groupby(['geohash'], as_index=False).agg({
+                                                                                                 'value': np.sum,
+                                                                                                 'permit_count': np.sum,
+                                                                                                 'geohash_center': "first",
+                                                                                                 'geom': "first"
+                                                                                               })
+
+            elif geo_store is not None:
+
+                df_econ_vitality_v1 = pd.DataFrame.from_dict(geo_store['Vitality'])
+
+                df_econ_vitality_v1['geom'] = df_econ_vitality_v1.geom.apply(valid_geoms)
+
+            else:
+
+                df_econ_vitality_v1 = pd.DataFrame({})
+
+            if df_econ_vitality_v1.shape[0] > 0:
+
+                # To GeoPandas
+                #df_econ_vitality_v1['geom'] = gpd.GeoSeries.from_wkt(df_econ_vitality_v1['geom'])
+                gdf_econ_vitality = gpd.GeoDataFrame(df_econ_vitality_v1, geometry='geom', crs='epsg:4326')
+
+                s = gdf_econ_vitality['value'].apply(clean_currency).astype(float)
+
+                label = "Economic Vitality"
+
+                geo_level = "geohash"
+                cscale = "Portland"
+
         # New Construction
         elif demo_dropdown == "Construction" or ctx.triggered[0]['value'] == 'Construction':
 
-            zoom = 13
+            zoom = 14
 
-            if mapdata is not None:
+            print("mapdata const", mapdata)
+
+            if mapdata is not None and ctx.triggered[0]['prop_id'] == 'map-deal.relayoutData':
 
                 if len(mapdata) > 1 and 'mapbox.center' in mapdata and 'mapbox.zoom' in mapdata:
+
+                    print('const set coords')
 
                     # set coords
                     coords[0] = mapdata['mapbox.center']['lat']
@@ -1036,15 +1299,18 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                     else:
                         zoom = mapdata['mapbox.zoom']
 
-            #if ctx.triggered[0]['value'] == 'Construction':
             # Query permits data within x miles
+            con = engine.connect()
+
             query = '''
                     select * from stroom_main.df_construction
                     where st_distance_sphere(Point({},{}), coords) <= {};
-                    '''.format(coords[1], coords[0], 1609)
+                    '''.format(coords[1], coords[0], 1609*1.5)
 
             # To panads
             df_construct = pd.read_sql(query, con)
+
+            con.close()
 
             # Not NaN
             df_construct['value'] = df_construct['value'].apply(clean_currency)
@@ -1064,6 +1330,10 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
             # Not NA
             df_construct = df_construct[(df_construct['Lat'].notna()) & (df_construct['Long'].notna())]
+
+            # value > 100000
+            df_construct['value'] = df_construct['value'].astype(float)
+            df_construct = df_construct[df_construct['value'] > 100000]
 
             print("df construct", df_construct.shape)
 
@@ -1111,11 +1381,9 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                                   }
                    )
 
-
-        # Economic vitality score
-
-
         elif demo_dropdown == "Home":
+
+            con = engine.connect()
 
             query = '''
                     select Median_Home_Value_2019, tract_geom, tract_ce, lsad_name
@@ -1124,6 +1392,9 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                     '''.format(market)
 
             dfc = pd.read_sql(query, con)
+
+            con.close()
+
             dfc =  dfc[dfc['tract_geom'].notna()]
 
             dfc['tract_geom'] = dfc.tract_geom.apply(valid_geoms)
@@ -1138,8 +1409,9 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
             label = "Median Home Value"
             geo_level = "census"
 
-
         elif demo_dropdown == "Pop":
+
+            con = engine.connect()
 
             query = '''
                     select Population_2019, tract_geom, tract_ce, lsad_name
@@ -1148,6 +1420,9 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                     '''.format(market)
 
             dfc = pd.read_sql(query, con)
+
+            con.close()
+
             dfc =  dfc[dfc['tract_geom'].notna()]
 
             dfc['tract_geom'] = dfc.tract_geom.apply(valid_geoms)
@@ -1164,6 +1439,8 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
         elif demo_dropdown == "Income":
 
+            con = engine.connect()
+
             query = '''
                     select Median_HH_Income_2019, tract_geom, tract_ce, lsad_name
                     from stroom_main.usgeodata_july_v1
@@ -1171,6 +1448,9 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                     '''.format(market)
 
             dfc = pd.read_sql(query, con)
+
+            con.close()
+
             dfc =  dfc[dfc['tract_geom'].notna()]
 
             dfc['tract_geom'] = dfc.tract_geom.apply(valid_geoms)
@@ -1188,6 +1468,8 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
         elif demo_dropdown == "Income-change":
 
+            con = engine.connect()
+
             query = '''
                     select median_hh_income_percent_change, tract_geom, tract_ce, lsad_name
                     from stroom_main.usgeodata_july_v1
@@ -1195,6 +1477,9 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                     '''.format(market)
 
             dfc = pd.read_sql(query, con)
+
+            con.close()
+
             dfc =  dfc[dfc['tract_geom'].notna()]
 
             dfc['tract_geom'] = dfc.tract_geom.apply(valid_geoms)
@@ -1212,6 +1497,8 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
         elif demo_dropdown == "Pop-change":
 
+            con = engine.connect()
+
             query = '''
                     select population_percent_change, tract_geom, tract_ce, lsad_name
                     from stroom_main.usgeodata_july_v1
@@ -1219,6 +1506,9 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                     '''.format(market)
 
             dfc = pd.read_sql(query, con)
+
+            con.close()
+
             dfc =  dfc[dfc['tract_geom'].notna()]
 
             dfc['tract_geom'] = dfc.tract_geom.apply(valid_geoms)
@@ -1235,6 +1525,8 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
         elif demo_dropdown == "Home-value-change":
 
+            con = engine.connect()
+
             query = '''
                     select median_home_value_percent_change, tract_geom, tract_ce, lsad_name
                     from stroom_main.usgeodata_july_v1
@@ -1242,6 +1534,9 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                     '''.format(market)
 
             dfc = pd.read_sql(query, con)
+
+            con.close()
+
             dfc =  dfc[dfc['tract_geom'].notna()]
 
             dfc['tract_geom'] = dfc.tract_geom.apply(valid_geoms)
@@ -1258,6 +1553,8 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
         elif demo_dropdown == "Price_Rent_Ratio":
 
+            con = engine.connect()
+
             query = '''
                     select (Median_Home_Value_2019)/((zrent_median)*12) as price_rent_ratio, tract_geom, tract_ce, lsad_name
                     from stroom_main.usgeodata_july_v1
@@ -1265,6 +1562,9 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                     '''.format(market)
 
             dfc = pd.read_sql(query, con)
+
+            con.close()
+
             dfc =  dfc[dfc['tract_geom'].notna()]
 
             dfc['tract_geom'] = dfc.tract_geom.apply(valid_geoms)
@@ -1281,6 +1581,8 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
         elif demo_dropdown == "Rent_Price_Ratio":
 
+            con = engine.connect()
+
             query = '''
                     select ((zrent_median)*12)/(Median_Home_Value_2019) as rent_price_ratio, tract_geom, tract_ce, lsad_name
                     from stroom_main.usgeodata_july_v1
@@ -1288,6 +1590,9 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                     '''.format(market)
 
             dfc = pd.read_sql(query, con)
+
+            con.close()
+
             dfc =  dfc[dfc['tract_geom'].notna()]
 
             dfc['tract_geom'] = dfc.tract_geom.apply(valid_geoms)
@@ -1304,6 +1609,8 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
         elif demo_dropdown == "Bachelor":
 
+            con = engine.connect()
+
             query = '''
                     select Bachelors_Degree_2019, tract_geom, tract_ce, lsad_name
                     from stroom_main.usgeodata_july_v1
@@ -1311,6 +1618,9 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                     '''.format(market)
 
             dfc = pd.read_sql(query, con)
+
+            con.close()
+
             dfc =  dfc[dfc['tract_geom'].notna()]
 
             dfc['tract_geom'] = dfc.tract_geom.apply(valid_geoms)
@@ -1327,6 +1637,8 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
         elif demo_dropdown == "Graduate":
 
+            con = engine.connect()
+
             query = '''
                     select Graduate_Degree_2019, tract_geom, tract_ce, lsad_name
                     from stroom_main.usgeodata_july_v1
@@ -1334,6 +1646,9 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                     '''.format(market)
 
             dfc = pd.read_sql(query, con)
+
+            con.close()
+
             dfc =  dfc[dfc['tract_geom'].notna()]
 
             dfc['tract_geom'] = dfc.tract_geom.apply(valid_geoms)
@@ -1351,6 +1666,9 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
         elif demo_dropdown == "Traffic":
 
             if ctx.triggered[0]['value'] == 'Traffic':
+
+                con = engine.connect()
+
                 # Get Traffic tiles
                 query = '''
                         select *
@@ -1359,6 +1677,8 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                         '''.format(market)
 
                 dfc_tr = pd.read_sql(query, con)
+
+                con.close()
 
             elif geo_store is not None:
 
@@ -1383,7 +1703,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
 
         # Clear scattermapbox - properties layer
-        if not overlay:
+        if not overlay: #or ctx.triggered[0]['prop_id'] == 'demo-deal.value' and ctx.triggered[0]['value'] == None:
             datad.clear()
 
         if geo_level == "census":
@@ -1463,6 +1783,46 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                          }
             )
 
+        elif geo_level == 'geohash':
+
+            gdf_econ_vitality['value'] = gdf_econ_vitality['value'].apply(clean_currency).astype(float).apply('${:,.0f}'.format)
+
+            datad.append({
+
+                            "type": "choroplethmapbox",
+                            "geojson": gdf_econ_vitality.__geo_interface__,
+                            "locations": gdf_econ_vitality['geohash'],
+                            "z": s,
+                            "featureidkey": "properties.geohash",
+                            "hovertext": gdf_econ_vitality['value'],
+                            "autocolorscale":False,
+                            "colorscale": cscale,
+                            "colorbar":dict(
+                                            title = dict(text=label,
+                                                         font=dict(size=12)
+                                                        ),
+                                            orientation = 'v',
+                                            x= -0.15,
+                                            xanchor= "left",
+                                            y= 0,
+                                            yanchor= "bottom",
+                                            showticklabels=True,
+                                            thickness= 20,
+                                            tickformatstops=dict(dtickrange=[0,10]),
+                                            titleside= 'top',
+                                            ticks= 'outside'
+                                           ),
+                            "zmin": s.min(),
+                            "zmax": s.max(),
+                            "marker": dict(opacity = 0.6),
+                            "marker_line_width": 0,
+                            "opacity": 0.2,
+                            "labels": label,
+                            "title": "Choropleth - Geohash Level"
+
+                         }
+            )
+
         elif geo_level == "hex":
 
             zoom = 14
@@ -1508,7 +1868,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
         zoom = 12
 
-        if mapdata is not None:
+        if mapdata is not None and ctx.triggered[0]['prop_id'] == 'map-deal.relayoutData':
 
             if len(mapdata) > 1 and 'mapbox.center' in mapdata and 'mapbox.zoom' in mapdata:
 
@@ -1592,6 +1952,12 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                               }
                )
 
+    # check if zoom is defined
+    try:
+        zoom
+    except NameError:
+        zoom = 10
+
     layout = {
 
                  "autosize": False,
@@ -1622,23 +1988,17 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
     if len(datad) > 0:
 
-        # If clear properties - eject scattermapbox property layer
-        # if clear_properties_nclicks > 0:
-        #     for d in datad:
-        #         if d['type'] == 'scattermapbox':
-        #             datad.remove(d)
-
         # Rearrange so that scattermapbox is top layer
         for i in range(len(datad)):
             if datad[i]['type'] == 'scattermapbox':
                 datad.append(datad.pop(datad.index(datad[i])))
 
-        if market is not None and df_msa.shape[0] > 0 and demo_dropdown is None and loc_dropdown is None:
+        if market is not None and df_msa.shape[0] > 0 and demo_dropdown in [None, ""] and loc_dropdown in [None, ""]:
             print('return case #1 - market selected, show properties')
 
-            return ({"data": datad, "layout": layout}, df1.to_dict("records"), "Property Count:{}".format(df1.shape[0]), df_msa.to_dict('records'), no_update)
+            return ({"data": datad, "layout": layout}, df1.to_dict("records"), "Property Count:{}".format(df1.shape[0]), df_msa.to_dict('records'), no_update, {"lat": coords[0], "lon": coords[1]})
 
-        elif market is not None and market in Market_List and demo_dropdown is not None:
+        elif market is not None and market in Market_List and demo_dropdown not in [None, ""]:
             print('return case #2 - market selected and demo dropdown')
 
             demo_store = no_update
@@ -1648,6 +2008,12 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                 df_rg['geom'] = df_rg.geom.apply(lambda x: wkt.dumps(x))
 
                 demo_store = {demo_dropdown : df_rg.to_dict("records")}
+
+            elif demo_dropdown in ['Vitality']:
+                # Polygon, Point to strings
+                df_econ_vitality_v1['geom'] = df_econ_vitality_v1.geom.apply(lambda x: wkt.dumps(x))
+                #df_econ_vitality_v1['geohash_center'] = df_econ_vitality_v1.geohash_center.apply(lambda x: wkt.dumps(x))
+                demo_store = {demo_dropdown : df_econ_vitality_v1.to_dict("records")}
 
             elif demo_dropdown in ['Traffic']:
                 # Polygon to strings
@@ -1664,21 +2030,21 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
             else:
                 demo_store = no_update
 
-            return ({"data": datad, "layout": layout}, df1.to_dict("records"), "Property Count: {}".format(df1.shape[0]), df_msa.to_dict("records"), demo_store)
+            return ({"data": datad, "layout": layout}, df1.to_dict("records"), "Property Count: {}".format(df1.shape[0]), df_msa.to_dict("records"), demo_store, {"lat": coords[0], "lon": coords[1]})
 
-        elif market is not None and market in Market_List and loc_dropdown is not None:
+        elif market is not None and market in Market_List and loc_dropdown is not None and loc_dropdown != "":
             print('return case #3 - market selected and location dropdown')
-            return ({"data": datad, "layout": layout}, no_update, no_update, no_update, no_update)
+            return ({"data": datad, "layout": layout}, no_update, no_update, no_update, no_update, {"lat": coords[0], "lon": coords[1]})
 
     elif len(data_def) > 0 and market is None:
         print('return case #4 - data default')
         datad.clear()
-        return ({"data": data_def, "layout": layout}, no_update, "Property Count: {}".format(0), no_update, no_update)
+        return ({"data": data_def, "layout": layout}, no_update, "Property Count: {}".format(0), no_update, no_update, no_update)
 
     else:
         print('return case #5 - final else')
         datad.clear()
-        return ({"data": data_def, "layout": layout}, no_update, "Property Count: {}".format(0), no_update, no_update)
+        return ({"data": data_def, "layout": layout}, no_update, "Property Count: {}".format(0), no_update, no_update, no_update)
 
 
 
@@ -1724,7 +2090,9 @@ def reset_selections(market, mapdata):
     print('reset selections callback')
 
     # Disable filters until market is selected
-    if market is None or ctx.triggered_id == "market-deal" and ctx.triggered[0]['value'] == '':
+    if market is None:
+        return ("", True, "", "", True, "", True, "", True, "", True, "", True, "", True)
+    elif ctx.triggered_id == "market-deal" and ctx.triggered[0]['value'] == '':
         return ("", True, "", "", True, "", True, "", True, "", True, "", True, "", True)
     else:
         return (no_update, False, no_update, no_update, False, no_update, False, no_update, False, no_update, False, no_update, False, no_update, False)
@@ -1770,6 +2138,7 @@ def reset_selections(market, mapdata):
                           [
                                # Button clicks
                                Input("map-deal","clickData"),
+                               Input("algo-mode-switch", "on"),
                                Input("close_deal","n_clicks")
 
                           ],
@@ -1779,7 +2148,7 @@ def reset_selections(market, mapdata):
                                 State("msa-prop-store", "data")
                           ],
                     )
-def display_popup2(clickData, n_clicks, is_open, msa_store):
+def display_popup2(clickData, algo_switch, n_clicks, is_open, msa_store):
 
     if clickData and "customdata" in clickData["points"][0]:
 
@@ -1928,26 +2297,33 @@ def display_popup2(clickData, n_clicks, is_open, msa_store):
         lat, long = get_geocodes(Address)
         streetview_url = "https://www.google.com/maps/embed/v1/streetview?key={}&location={},{}&heading=180&pitch=10&fov=75".format(gmaps_api, lat, long)
 
-        # Formatted Rent for default view (NA) and calculated / post button click and handling of None values
-        try:
+        if algo_switch == True:
 
-            if upsideCat in ["null", None, 0, "0", 0.0, "0.0"]:
-                upsideCat_src = no_update
-                upsideCat_txt = no_update
-            elif upsideCat == "High":
-                upsideCat_src = "https://stroom-images.s3.us-west-1.amazonaws.com/high-growth.png"
-                upsideCat_txt = "High Upside Potential (> 25%+)"
-            elif upsideCat == "Medium":
-                upsideCat_src = "https://stroom-images.s3.us-west-1.amazonaws.com/average_chart.png"
-                upsideCat_txt = "Medium Upside Potential (10% - 25%)"
-            elif upsideCat == "Low":
+            # Formatted Rent for default view (NA) and calculated / post button click and handling of None values
+            try:
+
+                if upsideCat in ["null", None, 0, "0", 0.0, "0.0"]:
+                    upsideCat_src = no_update
+                    upsideCat_txt = no_update
+                elif upsideCat == "High":
+                    upsideCat_src = "https://stroom-images.s3.us-west-1.amazonaws.com/high-growth.png"
+                    upsideCat_txt = "High Upside Potential (> 25%+)"
+                elif upsideCat == "Medium":
+                    upsideCat_src = "https://stroom-images.s3.us-west-1.amazonaws.com/average_chart.png"
+                    upsideCat_txt = "Medium Upside Potential (10% - 25%)"
+                elif upsideCat == "Low":
+                    upsideCat_src = "https://stroom-images.s3.us-west-1.amazonaws.com/low-growth.png"
+                    upsideCat_txt = "Low Upside Potential (< 10%)"
+
+            except Exception as e:
+                print("Upside Cat Exception", e)
                 upsideCat_src = "https://stroom-images.s3.us-west-1.amazonaws.com/low-growth.png"
                 upsideCat_txt = "Low Upside Potential (< 10%)"
 
-        except Exception as e:
-            print("Upside Cat Exception", e)
-            upsideCat_src = "https://stroom-images.s3.us-west-1.amazonaws.com/low-growth.png"
-            upsideCat_txt = "Low Upside Potential (< 10%)"
+        else:
+
+            upsideCat_src = no_update
+            upsideCat_txt = no_update
 
         try:
 

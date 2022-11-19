@@ -628,7 +628,7 @@ div#location-deal {
 }
 
 div#overlay {
-  padding: 10px 0px 10px 0px;
+  padding: 20px 0px 10px 0px;
 }
 
 .row-1-deal {
@@ -639,7 +639,7 @@ div#overlay {
 
 .row-prop-count {
   float: right;
-  margin-right: 2em;
+  margin-right: 10em;
 }
 
 .row-map-deal {
@@ -651,7 +651,7 @@ div#overlay {
 }
 
 .table-style-deal {
-  width: 95.5%;
+  width: 88.5%;
   margin-left: 16px;
   margin-top: 10px;
 }
@@ -659,7 +659,7 @@ div#overlay {
 
 div#map-deal {
   display: inline-block;
-  width: 594%;
+  width: 540%;
   height:500px;
   float: left;
   margin-left: 2em;
@@ -675,6 +675,7 @@ div#map-deal {
 
 .layers {
   font-weight: bold;
+  padding: 16px 0px 10px 6px}
 }
 
 .algo {

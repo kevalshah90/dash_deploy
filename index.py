@@ -42,14 +42,14 @@ application.layout = html.Div([
                             html.Div(
 
                                 [
-                                    html.H4("Market Intelligence", style={"textAlign":"center"}),
+                                    html.H4("Acquisition Technology", style={"textAlign":"center"}),
                                     html.Hr(),
                                     dbc.Nav(
                                         [
                                             dbc.NavLink("Deals", href="/deals", active="partial"),
                                             dbc.NavLink("Comps", href="/comps", active="partial"),
                                             #dbc.NavLink("Market", href="/market", active="partial"),
-                                            #dbc.NavLink("Returns", href="/returns", active="partial")
+                                            dbc.NavLink("Returns (Beta)", href="/returns", active="partial")
 
                                         ],
                                         vertical=True,
@@ -87,8 +87,10 @@ application.layout = html.Div([
                             dcc.Store(id="msa-prop-store", storage_type="local"),
 
                             # Store rent growth / Volatility in deals Tab
-                            dcc.Store(id="geo-store", storage_type="local")
+                            dcc.Store(id="geo-store", storage_type="local"),
 
+                            # Store rent growth / Volatility in deals Tab
+                            dcc.Store(id="coords-store", storage_type="local")
 
                             ],
 

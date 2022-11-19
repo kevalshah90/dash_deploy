@@ -256,7 +256,7 @@ def calc_rev(prop_address, yr_built, space, units, assval, opex, taxAmt, taxRate
     for i in range(2):
 
         query = '''
-                select * from stroom_main.df_raw_v6_july
+                select * from stroom_main.df_raw_july
                 where st_distance_sphere(Point({},{}), coords) <= {};
                 '''.format(Long, Lat, radius_cmbs)
 
