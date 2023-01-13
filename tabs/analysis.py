@@ -22,7 +22,8 @@ from scipy.stats import poisson
 from statistics import mean
 from natural_vac import reg_vacancy
 from draw_polygon import market_Lookup
-from funcs import clean_percent, clean_currency, get_geocodes
+from funcs import DataProcessor
+from config import *
 from dash.exceptions import PreventUpdate
 from sklearn.preprocessing import MinMaxScaler
 import geocoder
@@ -37,21 +38,20 @@ from sklearn.pipeline import make_pipeline
 import censusgeocode as cg
 from census import Census
 from us import states
-c = Census("71a69d38e3f63242eca7e63b8de1019b6e9f5912")
+c = Census(os.environ["ckey"])
 
 # Google maps api key
 import googlemaps
-gmaps = googlemaps.Client(key="AIzaSyC0XCzdNwzI26ad9XXgwFRn2s7HrCWnCOk")
+gmaps = googlemaps.Client(key=os.environ["gkey"])
 
 # Google cloud + Big Query
 from google.cloud import bigquery
 import pyarrow
-client = bigquery.Client(project = "stroom-data-exploration")
-os.environ.setdefault("GCLOUD_PROJECT", "stroom-data-exploration")
+client = bigquery.Client(project = os.environ["GCLOUD_PROJECT"])
+os.environ.setdefault("GCLOUD_PROJECT", os.environ["GCLOUD_PROJECT"])
 
 # Mapbox
-MAPBOX_KEY = "pk.eyJ1Ijoic3Ryb29tIiwiYSI6ImNsNWVnMmpueTEwejQza252ZnN4Zm02bG4ifQ.SMGyKFikz4uDDqN6JvEq7Q"
-token = MAPBOX_KEY
+token = os.environ["MAPBOX_KEY"]
 Geocoder = mapbox.Geocoder(access_token=token)
 
 plotly_template = pio.templates["plotly"]
@@ -248,7 +248,7 @@ def demo_data(market, comps_store):
         geojson = g.json
 
         # Lookup market / submarket
-        Lat, Long = get_geocodes(addr)
+        Lat, Long = DataProcessor.get_geocodes(addr)
         market = market_Lookup(Lat, Long, geom_dict)
 
         # Census
@@ -302,11 +302,11 @@ def demo_data(market, comps_store):
 
         # Monthly Average/Median rent to gross median income ratio
 
-        income = int(clean_currency(inc))
+        income = int(DataProcessor.clean_currency(inc))
 
         df = df_market[df_market['CBSA'] == market]
 
-        df['Rent'] = df['Rent'].apply(clean_currency)
+        df['Rent'] = df['Rent'].apply(DataProcessor.clean_currency)
 
         ratio = df['Rent'].mean()/(income/12)
         ratio = '{:,.0f}%'.format(ratio*100)

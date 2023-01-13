@@ -28,39 +28,35 @@ from dash.dash import no_update
 from dash.exceptions import PreventUpdate
 import io
 from urllib.request import urlopen
-from funcs import clean_percent, clean_currency, get_geocodes, create_presigned_url, streetview, nearby_places, sym_dict, valid_geoms
+from funcs import DataProcessor
+from config import *
 
-# US Census libraries and API key
+# # US Census libraries and API key
 import censusgeocode as cg
 from census import Census
 from us import states
-c = Census("71a69d38e3f63242eca7e63b8de1019b6e9f5912")
+c = Census(os.environ["ckey"])
 
-# AWS credentials
+# # AWS credentials
 import boto3
-aws_id = 'AKIA2MQCGH6RW7TE3UG2'
-aws_secret = '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'
+aws_id = os.environ['aws_access_key_id']
+aws_secret = os.environ['aws_secret_access_key']
 s3 = boto3.client('s3')
 
-# Google Maps API key
+# # Google Maps API key
 import googlemaps
-gmaps = googlemaps.Client(key="AIzaSyC0XCzdNwzI26ad9XXgwFRn2s7HrCWnCOk")
-gmaps_api = "AIzaSyC0XCzdNwzI26ad9XXgwFRn2s7HrCWnCOk"
+gmaps = googlemaps.Client(key = os.environ['gkey'])
 
 # Mapbox
-MAPBOX_KEY="pk.eyJ1Ijoic3Ryb29tIiwiYSI6ImNsNWVnMmpueTEwejQza252ZnN4Zm02bG4ifQ.SMGyKFikz4uDDqN6JvEq7Q"
-token = MAPBOX_KEY
+token = os.environ["MAPBOX_KEY"]
 Geocoder = mapbox.Geocoder(access_token=token)
 
 # mysql connection
 import pymysql
 from sqlalchemy import create_engine
-user = 'stroom'
-pwd = 'Stroomrds'
-host =  'aa1jp4wsh8skxvw.csl5a9cjrheo.us-west-1.rds.amazonaws.com'
-port = 3306
+
 database = 'stroom_main'
-engine = create_engine("mysql+pymysql://{}:{}@{}/{}".format(user,pwd,host,database))
+engine = create_engine("mysql+pymysql://{}:{}@{}/{}".format(os.environ["user"], os.environ["pwd"], os.environ["host"], database))
 
 #Query GeoData
 try:
@@ -276,7 +272,7 @@ layout = html.Div([
                            dbc.InputGroup(
                                [
 
-                                  daq.BooleanSwitch(id='algo-mode-switch', label={"label":"Upside Algorithm", "style":{"font-weight":"bold"}}, labelPosition="top", on=False),
+                                  daq.BooleanSwitch(id='algo-mode-switch', label={"label":"Upside Algorithm", "style":{"font-weight":"bold"}}, labelPosition="top", on=True),
 
                                   dcc.Checklist(
                                                 id = "overlay",
@@ -293,7 +289,7 @@ layout = html.Div([
                                                  options=[
                                                           {'label': 'Rent Growth', 'value': 'RentGrowth'},
                                                           {'label': 'Market Volatility', 'value': 'Volatility'},
-                                                          {'label': 'Job Growth', 'value': 'JobGrowth'},
+                                                          #{'label': 'Job Growth', 'value': 'JobGrowth'},
                                                           {'label': 'Construction Starts', 'value': 'Construction'},
                                                           {'label': 'Economic Vitality', 'value': 'Vitality'},
                                                           {'label': 'Home Value', 'value': 'Home'},
@@ -707,7 +703,12 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
         # Update market select flag
         msa_ctx = True
 
-        lat, long = get_geocodes(market.split('-')[0] + ' ,United States')
+        loc = market.split('-')[0] + ',United States'
+        print(loc)
+
+        lat, long = DataProcessor.get_geocodes(loc)
+
+        #lat, long = DataProcessor.get_geocodes(market.split('-')[0] + ' ,United States')
         coords[0] = lat
         coords[1] = long
         zoom = 10
@@ -735,7 +736,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
         # Update market select flag
         msa_ctx = True
 
-        lat, long = get_geocodes(market.split('-')[0] + ' ,United States')
+        lat, long = DataProcessor.get_geocodes(market.split('-')[0] + ' ,United States')
         coords[0] = lat
         coords[1] = long
         zoom = 10
@@ -747,7 +748,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
         # Update market select flag
         msa_ctx = True
 
-        lat, long = get_geocodes(market.split('-')[0] + ' ,United States')
+        lat, long = DataProcessor.get_geocodes(market.split('-')[0] + ' ,United States')
         coords[0] = lat
         coords[1] = long
         zoom = 10
@@ -763,7 +764,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
             # Update market select flag
             msa_ctx = True
 
-            lat, long = get_geocodes(market.split('-')[0] + ' ,United States')
+            lat, long = DataProcessor.get_geocodes(market.split('-')[0] + ' ,United States')
             coords[0] = lat
             coords[1] = long
             zoom = 10
@@ -892,11 +893,15 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
         df1['zrent_median'] = df1['zrent_median'].astype(float).apply('${:.0f}'.format)
         df1['Preceding_Fiscal_Year_Revenue'] = df1['Preceding_Fiscal_Year_Revenue'].astype(float).apply('${:,.0f}'.format)
 
-        df1['Preceding_Fiscal_Year_Operating_Expenses'] = df1['Preceding_Fiscal_Year_Operating_Expenses'].apply(clean_currency)
+        #df1['Preceding_Fiscal_Year_Operating_Expenses'] = DataProcessor.clean_currency(df1['Preceding_Fiscal_Year_Operating_Expenses'])
+
+        df1['Preceding_Fiscal_Year_Operating_Expenses'] = df1['Preceding_Fiscal_Year_Operating_Expenses'].apply(lambda x: DataProcessor.clean_currency(x))
+
         df1['Preceding_Fiscal_Year_Operating_Expenses'] = df1['Preceding_Fiscal_Year_Operating_Expenses'].astype(float).apply('${:,.0f}'.format)
 
+        df1['Occ'] = df1['Occ'].apply(lambda x: DataProcessor.clean_percent(x))
 
-        df1['Occ'] = df1['Occ'].apply(clean_percent).astype(float).apply('{:.0f}%'.format)
+        df1['Occ'] = (df1['Occ']).astype(float).apply('{:.0f}%'.format)
 
         df1['EstRentableArea'] = df1['EstRentableArea'].astype(float).apply('{:,.0f}'.format)
 
@@ -969,7 +974,9 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
         if algo_switch == True or ctx.triggered[0]['prop_id'] == "algo-mode-switch.on" and ctx.triggered[0]['value'] == True:
 
-            df1['diff_potential'] = df1['diff_potential'].apply(clean_percent).astype(float)
+            #df1['diff_potential'] = DataProcessor.clean_percent(df1['diff_potential']).astype(float)
+
+            df1['diff_potential'] = df1['diff_potential'].apply(lambda x: DataProcessor.clean_percent(x)).astype(float)
 
             datad.append({
 
@@ -1240,11 +1247,11 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
                 con.close()
 
-                df_econ_vitality['geom'] = df_econ_vitality.geom.apply(valid_geoms)
+                df_econ_vitality['geom'] = df_econ_vitality.geom.apply(DataProcessor.valid_geoms)
                 df_econ_vitality = df_econ_vitality[df_econ_vitality['geom'].notna()]
 
                 # Format value
-                df_econ_vitality['value'] = df_econ_vitality['value'].apply(clean_currency).astype(float)
+                df_econ_vitality['value'] = DataProcessor.clean_currency(df_econ_vitality['value']).astype(float)
 
                 df_econ_vitality_v1 = df_econ_vitality.groupby(['geohash'], as_index=False).agg({
                                                                                                  'value': np.sum,
@@ -1257,7 +1264,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
                 df_econ_vitality_v1 = pd.DataFrame.from_dict(geo_store['Vitality'])
 
-                df_econ_vitality_v1['geom'] = df_econ_vitality_v1.geom.apply(valid_geoms)
+                df_econ_vitality_v1['geom'] = df_econ_vitality_v1.geom.apply(DataProcessor.valid_geoms)
 
             else:
 
@@ -1269,7 +1276,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                 #df_econ_vitality_v1['geom'] = gpd.GeoSeries.from_wkt(df_econ_vitality_v1['geom'])
                 gdf_econ_vitality = gpd.GeoDataFrame(df_econ_vitality_v1, geometry='geom', crs='epsg:4326')
 
-                s = gdf_econ_vitality['value'].apply(clean_currency).astype(float)
+                s = DataProcessor.clean_currency(gdf_econ_vitality['value']).astype(float)
 
                 label = "Economic Vitality"
 
@@ -1313,7 +1320,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
             con.close()
 
             # Not NaN
-            df_construct['value'] = df_construct['value'].apply(clean_currency)
+            df_construct['value'] = DataProcessor.clean_currency(df_construct['value'])
             df_construct = df_construct[(df_construct['value'].notna())]
 
             # elif geo_store is not None:
@@ -1342,7 +1349,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                 if isinstance(df_construct, pd.DataFrame) and df_construct.shape[0] > 0:
 
                    # Concat name and rating
-                   df_construct['value'] = df_construct['value'].apply(clean_currency)
+                   df_construct['value'] = DataProcessor.clean_currency(df_construct['value'])
                    df_construct['value'] = df_construct['value'].astype(float).apply('${:,.0f}'.format)
                    df_construct['work_description'] = df_construct['work_description'].astype(str)
 
@@ -1355,9 +1362,9 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                    for i in df_construct['ConstType']:
 
                        if i == "Residential":
-                           typ = sym_dict.get("Multi-Family")
+                           typ = DataProcessor.sym_dict.get("Multi-Family")
                        else:
-                           typ = sym_dict.get("Office")
+                           typ = DataProcessor.sym_dict.get("Office")
 
                        sym_list.append(typ)
 
@@ -1397,7 +1404,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
             dfc =  dfc[dfc['tract_geom'].notna()]
 
-            dfc['tract_geom'] = dfc.tract_geom.apply(valid_geoms)
+            dfc['tract_geom'] = dfc.tract_geom.apply(DataProcessor.valid_geoms)
             dfc = dfc[dfc['tract_geom'].notna()]
 
             # Convert to GeoDataFrame
@@ -1425,7 +1432,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
             dfc =  dfc[dfc['tract_geom'].notna()]
 
-            dfc['tract_geom'] = dfc.tract_geom.apply(valid_geoms)
+            dfc['tract_geom'] = dfc.tract_geom.apply(DataProcessor.valid_geoms)
             dfc = dfc[dfc['tract_geom'].notna()]
 
             # Convert to GeoDataFrame
@@ -1453,7 +1460,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
             dfc =  dfc[dfc['tract_geom'].notna()]
 
-            dfc['tract_geom'] = dfc.tract_geom.apply(valid_geoms)
+            dfc['tract_geom'] = dfc.tract_geom.apply(DataProcessor.valid_geoms)
             dfc = dfc[dfc['tract_geom'].notna()]
 
             # Convert to GeoDataFrame
@@ -1482,7 +1489,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
             dfc =  dfc[dfc['tract_geom'].notna()]
 
-            dfc['tract_geom'] = dfc.tract_geom.apply(valid_geoms)
+            dfc['tract_geom'] = dfc.tract_geom.apply(DataProcessor.valid_geoms)
             dfc = dfc[dfc['tract_geom'].notna()]
 
             # Convert to GeoDataFrame
@@ -1511,7 +1518,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
             dfc =  dfc[dfc['tract_geom'].notna()]
 
-            dfc['tract_geom'] = dfc.tract_geom.apply(valid_geoms)
+            dfc['tract_geom'] = dfc.tract_geom.apply(DataProcessor.valid_geoms)
             dfc = dfc[dfc['tract_geom'].notna()]
 
             # Convert to GeoDataFrame
@@ -1539,7 +1546,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
             dfc =  dfc[dfc['tract_geom'].notna()]
 
-            dfc['tract_geom'] = dfc.tract_geom.apply(valid_geoms)
+            dfc['tract_geom'] = dfc.tract_geom.apply(DataProcessor.valid_geoms)
             dfc = dfc[dfc['tract_geom'].notna()]
 
             # Convert to GeoDataFrame
@@ -1567,7 +1574,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
             dfc =  dfc[dfc['tract_geom'].notna()]
 
-            dfc['tract_geom'] = dfc.tract_geom.apply(valid_geoms)
+            dfc['tract_geom'] = dfc.tract_geom.apply(DataProcessor.valid_geoms)
             dfc = dfc[dfc['tract_geom'].notna()]
 
             # Convert to GeoDataFrame
@@ -1595,7 +1602,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
             dfc =  dfc[dfc['tract_geom'].notna()]
 
-            dfc['tract_geom'] = dfc.tract_geom.apply(valid_geoms)
+            dfc['tract_geom'] = dfc.tract_geom.apply(DataProcessor.valid_geoms)
             dfc = dfc[dfc['tract_geom'].notna()]
 
             # Convert to GeoDataFrame
@@ -1623,7 +1630,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
             dfc =  dfc[dfc['tract_geom'].notna()]
 
-            dfc['tract_geom'] = dfc.tract_geom.apply(valid_geoms)
+            dfc['tract_geom'] = dfc.tract_geom.apply(DataProcessor.valid_geoms)
             dfc = dfc[dfc['tract_geom'].notna()]
 
             # Convert to GeoDataFrame
@@ -1651,7 +1658,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
             dfc =  dfc[dfc['tract_geom'].notna()]
 
-            dfc['tract_geom'] = dfc.tract_geom.apply(valid_geoms)
+            dfc['tract_geom'] = dfc.tract_geom.apply(DataProcessor.valid_geoms)
             dfc = dfc[dfc['tract_geom'].notna()]
 
             # Convert to GeoDataFrame
@@ -1690,7 +1697,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
             if dfc_tr.shape[0] > 0:
                 # To GeoPandas
-                dfc_tr['wktGeometry'] = dfc_tr.wktGeometry.apply(valid_geoms)
+                dfc_tr['wktGeometry'] = dfc_tr.wktGeometry.apply(DataProcessor.valid_geoms)
                 dfc_tr = dfc_tr[dfc_tr['wktGeometry'].notna()]
 
                 gdfc_tr = gpd.GeoDataFrame(dfc_tr, geometry='wktGeometry', crs='epsg:4326')
@@ -1785,7 +1792,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
         elif geo_level == 'geohash':
 
-            gdf_econ_vitality['value'] = gdf_econ_vitality['value'].apply(clean_currency).astype(float).apply('${:,.0f}'.format)
+            gdf_econ_vitality['value'] = DataProcessor.clean_currency(gdf_econ_vitality['value']).astype(float).apply('${:,.0f}'.format)
 
             datad.append({
 
@@ -1887,15 +1894,15 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
         addr = geojson["address"]
 
         if loc_dropdown == "Transit":
-            df_nearby = nearby_places(addr, loc_dropdown)
+            df_nearby = DataProcessor.nearby_places(addr, loc_dropdown)
             hovertext = df_nearby['name']
 
         elif loc_dropdown == "Grocery":
-            df_nearby = nearby_places(addr, loc_dropdown)
+            df_nearby = DataProcessor.nearby_places(addr, loc_dropdown)
             hovertext = df_nearby['name']
 
         elif loc_dropdown == "School":
-            df_nearby = nearby_places(addr, loc_dropdown)
+            df_nearby = DataProcessor.nearby_places(addr, loc_dropdown)
 
             # Concat name and rating
             df_nearby['rating'] = df_nearby['rating'].astype(str)
@@ -1903,19 +1910,19 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
             hovertext = df_nearby['school_name_rating']
 
         elif loc_dropdown == "Hospital":
-            df_nearby = nearby_places(addr, loc_dropdown)
+            df_nearby = DataProcessor.nearby_places(addr, loc_dropdown)
             hovertext = df_nearby['name']
 
         elif loc_dropdown == "Food/Cafe":
-            df_nearby = nearby_places(addr, loc_dropdown)
+            df_nearby = DataProcessor.nearby_places(addr, loc_dropdown)
             hovertext = df_nearby['name']
 
         elif loc_dropdown == "Worship":
-            df_nearby = nearby_places(addr, loc_dropdown)
+            df_nearby = DataProcessor.nearby_places(addr, loc_dropdown)
             hovertext = df_nearby['name']
 
         elif loc_dropdown == "Gas":
-            df_nearby = nearby_places(addr, loc_dropdown)
+            df_nearby = DataProcessor.nearby_places(addr, loc_dropdown)
             hovertext = df_nearby['name']
 
         else:
@@ -1929,7 +1936,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                sym_list = []
 
                for i in df_nearby['type_label']:
-                   typ = sym_dict.get(i)
+                   typ = DataProcessor.sym_dict.get(i)
                    sym_list.append(typ)
 
                datad.append({
@@ -1964,7 +1971,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                  "hovermode": "closest",
                  "mapbox": {
 
-                     "accesstoken": MAPBOX_KEY,
+                     "accesstoken": os.environ["MAPBOX_KEY"],
                      "bearing": 0,
                      "center": {
                          "lat": coords[0],
@@ -2171,7 +2178,7 @@ def display_popup2(clickData, algo_switch, n_clicks, is_open, msa_store):
 
         rent_median = clickData["points"][0]["customdata"][7]
 
-        rent_median = clean_currency(rent_median)
+        rent_median = DataProcessor.clean_currency(rent_median)
 
         try:
             # string to list
@@ -2235,7 +2242,7 @@ def display_popup2(clickData, algo_switch, n_clicks, is_open, msa_store):
         #
         #                 parts = os.path.split(v)
         #
-        #                 url = create_presigned_url('gmaps-images-6771', 'property_images/{}'.format(parts[len(parts)-1]))
+        #                 url = DataProcessor.create_presigned_url('gmaps-images-6771', 'property_images/{}'.format(parts[len(parts)-1]))
         #
         #                 # Create a list of dicts for carousel
         #                 img_dict1 = {"key": c, "src": url, "img_style": {"width": "300px", "height": "300px"}}
@@ -2252,19 +2259,19 @@ def display_popup2(clickData, algo_switch, n_clicks, is_open, msa_store):
         #     else:
         #
         #         # Get coordinates
-        #         lat, long = get_geocodes(Address)
+        #         lat, long = DataProcessor.get_geocodes(Address)
         #
         #         '''
         #         Static Streetview Images Code
         #         '''
         #         # Get updated name of the streetview image
-        #         # name = streetview(lat, long, 'streetview')
+        #         # name = DataProcessor.streetview(lat, long, 'streetview')
         #         #
         #         # # Construct URL
-        #         # url = create_presigned_url('gmaps-images-6771', 'property_images/{}'.format(name))
+        #         # url = DataProcessor.create_presigned_url('gmaps-images-6771', 'property_images/{}'.format(name))
         #         #
         #         # if "None" in url:
-        #         #     url = create_presigned_url('gmaps-images-6771', 'property_images/no_imagery.png')
+        #         #     url = DataProcessor.create_presigned_url('gmaps-images-6771', 'property_images/no_imagery.png')
         #
         #         '''
         #         Interactive Streetview Pano Image Code
@@ -2283,7 +2290,7 @@ def display_popup2(clickData, algo_switch, n_clicks, is_open, msa_store):
         #
         # except Exception as e:
         #     print('Exception', e)
-        #     url = create_presigned_url('gmaps-images-6771', 'property_images/no_imagery.png')
+        #     url = DataProcessor.create_presigned_url('gmaps-images-6771', 'property_images/no_imagery.png')
         #
         #     carousel = dbc.Carousel(
         #                             items=[
@@ -2294,8 +2301,8 @@ def display_popup2(clickData, algo_switch, n_clicks, is_open, msa_store):
         #                 )
 
         # Construct URL for Interactive Streetview Map
-        lat, long = get_geocodes(Address)
-        streetview_url = "https://www.google.com/maps/embed/v1/streetview?key={}&location={},{}&heading=180&pitch=10&fov=75".format(gmaps_api, lat, long)
+        lat, long = DataProcessor.get_geocodes(Address)
+        streetview_url = "https://www.google.com/maps/embed/v1/streetview?key={}&location={},{}&heading=180&pitch=10&fov=75".format(os.environ['gkey'], lat, long)
 
         if algo_switch == True:
 
@@ -2341,7 +2348,7 @@ def display_popup2(clickData, algo_switch, n_clicks, is_open, msa_store):
             if Revenue in ["null", None, 0, "0", 0.0, "0.0", "$nan", "$0", "-"]:
                 Revenue_fmt = "-"
             else:
-                Revenue = clean_currency(Revenue)
+                Revenue = DataProcessor.clean_currency(Revenue)
                 Revenue_fmt = "${:,.0f}".format(float(Revenue))
 
         except Exception as e:
@@ -2353,7 +2360,7 @@ def display_popup2(clickData, algo_switch, n_clicks, is_open, msa_store):
             if Opex in ["null", None, 0, "0", 0.0, "0.0", "$0", "-"]:
                 Opex_fmt = "-"
             else:
-                Opex = clean_currency(Opex)
+                Opex = DataProcessor.clean_currency(Opex)
                 Opex_fmt = "${:,.0f}".format(float(Opex))
 
         except Exception as e:

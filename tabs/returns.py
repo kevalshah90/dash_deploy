@@ -19,7 +19,8 @@ from collections import defaultdict
 from dash.dash import no_update
 import json
 import plotly.io as pio
-from funcs import get_geocodes
+from funcs import DataProcessor
+from config import *
 from decimal import Decimal
 import re
 from re import sub
@@ -29,25 +30,19 @@ import locale
 
 # Google maps api key
 import googlemaps
-gmaps = googlemaps.Client(key="AIzaSyC0XCzdNwzI26ad9XXgwFRn2s7HrCWnCOk")
+gmaps = googlemaps.Client(key = os.environ["gkey"])
 
 # Mapbox
-MAPBOX_KEY="pk.eyJ1Ijoic3Ryb29tIiwiYSI6ImNsNWVnMmpueTEwejQza252ZnN4Zm02bG4ifQ.SMGyKFikz4uDDqN6JvEq7Q"
-token = MAPBOX_KEY
+token = os.environ["MAPBOX_KEY"]
 geocoder = mapbox.Geocoder(access_token=token)
 
 # mysql connection
 import pymysql
 from sqlalchemy import create_engine
-user = 'stroom'
-pwd = 'Stroomrds'
-host =  'aa1jp4wsh8skxvw.csl5a9cjrheo.us-west-1.rds.amazonaws.com'
-port = 3306
+
 database = 'stroom_main'
-engine = create_engine("mysql+pymysql://{}:{}@{}/{}".format(user,pwd,host,database))
+engine = create_engine("mysql+pymysql://{}:{}@{}/{}".format(os.environ["user"], os.environ["pwd"], os.environ["host"], database))
 con = engine.connect()
-
-
 
 layout = html.Div([
 
@@ -436,7 +431,7 @@ def populate_fields(dummy, modal_store):
         Lat = modal_store['points'][0]['lat']
         Long = modal_store['points'][0]['lon']
     else:
-        Lat, Long = get_geocodes(Address)
+        Lat, Long = DataProcessor.get_geocodes(Address)
 
     # Query Rent Growth
     con = engine.connect()

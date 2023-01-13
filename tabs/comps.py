@@ -24,9 +24,9 @@ from scipy import spatial
 from scipy import stats
 from dash.dash import no_update
 from dash.exceptions import PreventUpdate
-from base_rent_calc import calc_rev, walkscore
+from base_rent_calc import calc_rev
 from handle_images import getPlace_details
-from funcs import clean_percent, clean_currency, get_geocodes, nearby_places, streetview, create_presigned_url, gen_ids, str_num, listToDict, prox_mean, attom_api_avalue, sym_dict
+from funcs import DataProcessor
 from draw_polygon import poi_poly
 from sklearn.neighbors import BallTree
 from parse import parse_contents
@@ -40,27 +40,22 @@ import requests
 import geocoder
 import pygeohash as gh
 import google_streetview.api
+from config import *
 
 # Google Maps API key
 import googlemaps
-gmaps = googlemaps.Client(key="AIzaSyC0XCzdNwzI26ad9XXgwFRn2s7HrCWnCOk")
-gmaps_api = "AIzaSyC0XCzdNwzI26ad9XXgwFRn2s7HrCWnCOk"
-
+gmaps = googlemaps.Client(key = os.environ["gkey"])
 
 # Mapbox
-MAPBOX_KEY="pk.eyJ1Ijoic3Ryb29tIiwiYSI6ImNsNWVnMmpueTEwejQza252ZnN4Zm02bG4ifQ.SMGyKFikz4uDDqN6JvEq7Q"
-token = MAPBOX_KEY
-Geocoder = mapbox.Geocoder(access_token=token)
+token = os.environ["MAPBOX_KEY"]
+Geocoder = mapbox.Geocoder(access_token = token)
 
 # mysql connection
 import pymysql
 from sqlalchemy import create_engine
-user = 'stroom'
-pwd = 'Stroomrds'
-host =  'aa1jp4wsh8skxvw.csl5a9cjrheo.us-west-1.rds.amazonaws.com'
-port = 3306
+
 database = 'stroom_main'
-engine = create_engine("mysql+pymysql://{}:{}@{}/{}".format(user,pwd,host,database))
+engine = create_engine("mysql+pymysql://{}:{}@{}/{}".format(os.environ["user"], os.environ["pwd"], os.environ["host"], database))
 
 con = engine.connect()
 
@@ -793,7 +788,7 @@ def autopopulate_propdetails(address, is_open):
             else:
 
                 # ATTOM API Call
-                avdata = attom_api_avalue(addr)
+                avdata = DataProcessor.attom_api_avalue(addr)
                 avdata = json.loads(avdata.decode("utf-8"))
 
                 print("Attom API response", avdata)
@@ -801,7 +796,7 @@ def autopopulate_propdetails(address, is_open):
         else:
 
             # ATTOM API Call
-            avdata = attom_api_avalue(addr)
+            avdata = DataProcessor.attom_api_avalue(addr)
             avdata = json.loads(avdata.decode("utf-8"))
 
             print("Attom API response", avdata)
@@ -1057,7 +1052,7 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
                area_geo = dict()
 
                # Construct opex / sqft column
-               df_mf['opex_sqft_month'] = (df_mf['Most_Recent_Operating_Expenses'].apply(clean_currency).astype(float)/df_mf['EstRentableArea'].astype(float))/12
+               df_mf['opex_sqft_month'] = (df_mf['Most_Recent_Operating_Expenses'].apply(DataProcessor.clean_currency).astype(float)/df_mf['EstRentableArea'].astype(float))/12
                df_mf['opex_sqft_month'].replace([np.inf, -np.inf], np.nan, inplace=True)
                df_mf['opex_sqft_month'] = df_mf['opex_sqft_month'].apply(lambda x: round(x, 2))
 
@@ -1069,43 +1064,43 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
                for name, group in df_mf.groupby(['geohash']):
 
                    # Opex
-                   group['opex_sqft_month'] = group['opex_sqft_month'].apply(clean_currency).astype('float')
+                   group['opex_sqft_month'] = group['opex_sqft_month'].apply(DataProcessor.clean_currency).astype('float')
                    opex_geo[name] = group[group['opex_sqft_month'] > 0]['opex_sqft_month'].mean()
                    # Dict to pandas dataframe
                    opex_geo_df = pd.DataFrame(zip(opex_geo.keys(), opex_geo.values()), columns=['geohash', 'value'])
 
                    # Tax Rate
-                   group['taxRate'] = group['taxRate'].apply(clean_percent).astype('float')
+                   group['taxRate'] = group['taxRate'].apply(DataProcessor.clean_percent).astype('float')
                    taxRate_geo[name] = group[group['taxRate'] > 0]['taxRate'].mean()
                    # Dict to pandas dataframe
                    taxRate_geo_df = pd.DataFrame(zip(taxRate_geo.keys(), taxRate_geo.values()), columns=['geohash', 'value'])
 
                    # Property Tax
-                   group['propertyTaxAmount'] = group['propertyTaxAmount'].apply(clean_currency).astype('float')
+                   group['propertyTaxAmount'] = group['propertyTaxAmount'].apply(DataProcessor.clean_currency).astype('float')
                    taxAmt_geo[name] = group[group['propertyTaxAmount'] > 0]['propertyTaxAmount'].mean()
                    # Dict to pandas dataframe
                    taxAmt_geo_df = pd.DataFrame(zip(taxAmt_geo.keys(), taxAmt_geo.values()), columns=['geohash', 'value'])
 
                    # Assessed Value
-                   group['EstValue'] = group['EstValue'].apply(clean_currency).astype('float')
+                   group['EstValue'] = group['EstValue'].apply(DataProcessor.clean_currency).astype('float')
                    estVal_geo[name] = group[group['EstValue'] > 0]['EstValue'].mean()
                    # Dict to pandas dataframe
                    estVal_geo_df = pd.DataFrame(zip(estVal_geo.keys(), estVal_geo.values()), columns=['geohash', 'value'])
 
                    # Avg. Rents
-                   group['zrent_median'] = group['zrent_median'].apply(clean_currency).astype('float')
+                   group['zrent_median'] = group['zrent_median'].apply(DataProcessor.clean_currency).astype('float')
                    zrent_geo[name] = group[group['zrent_median'] > 0]['zrent_median'].mean()
                    # Dict to pandas dataframe
                    zrent_geo_df = pd.DataFrame(zip(zrent_geo.keys(), zrent_geo.values()), columns=['geohash', 'value'])
 
                    # Cap rate
-                   group['Cap_Rate_Iss'] = group['Cap_Rate_Iss'].apply(clean_currency).astype('float')
+                   group['Cap_Rate_Iss'] = group['Cap_Rate_Iss'].apply(DataProcessor.clean_currency).astype('float')
                    cap_geo[name] = group[group['Cap_Rate_Iss'] > 0]['Cap_Rate_Iss'].mean()
                    # Dict to pandas dataframe
                    cap_geo_df = pd.DataFrame(zip(cap_geo.keys(), cap_geo.values()), columns=['geohash', 'value'])
 
                    # Home Value
-                   group['Median_Home_Value_2019'] = group['Median_Home_Value_2019'].apply(clean_currency).astype('float')
+                   group['Median_Home_Value_2019'] = group['Median_Home_Value_2019'].apply(DataProcessor.clean_currency).astype('float')
                    home_geo[name] = group[group['Median_Home_Value_2019'] > 50000]['Median_Home_Value_2019'].mean()
                    # Dict to pandas dataframe
                    home_geo_df = pd.DataFrame(zip(home_geo.keys(), home_geo.values()), columns=['geohash', 'value'])
@@ -1213,19 +1208,19 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
                            taxAmt = api_store['attom_api']['property'][0]['assessment']['tax']['taxamt']
                            taxAmt = int(taxAmt)
                        except Exception as e:
-                           taxAmt = prox_mean(taxAmt_geo_df, geohashval)
+                           taxAmt = DataProcessor.prox_mean(taxAmt_geo_df, geohashval)
                            if taxAmt == 'nan':
                                taxAmt = 0
                            else:
                                taxAmt = int(taxAmt)
                    else:
-                       taxAmt = prox_mean(taxAmt_geo_df, geohashval)
+                       taxAmt = DataProcessor.prox_mean(taxAmt_geo_df, geohashval)
                        if taxAmt == 'nan':
                            taxAmt = 0
                        else:
                            taxAmt = int(taxAmt)
                else:
-                   taxAmt = prox_mean(taxAmt_geo_df, geohashval)
+                   taxAmt = DataProcessor.prox_mean(taxAmt_geo_df, geohashval)
                    try:
                        if taxAmt == 'nan':
                            taxAmt = 0
@@ -1239,7 +1234,7 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
                    taxRate = details[12]
                    taxRate = float(taxRate)
                else:
-                   taxRate = prox_mean(taxRate_geo_df, geohashval)
+                   taxRate = DataProcessor.prox_mean(taxRate_geo_df, geohashval)
                    taxRate = float(taxRate)
 
 
@@ -1252,13 +1247,13 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
                            assVal = api_store['attom_api']['property'][0]['assessment']['assessed']['assdttlvalue']
                            assVal = int(assVal)
                        except Exception as e:
-                           assVal = prox_mean(estVal_geo_df, geohashval)
+                           assVal = DataProcessor.prox_mean(estVal_geo_df, geohashval)
                            assVal = int(assVal)
                    else:
-                       assVal = prox_mean(estVal_geo_df, geohashval)
+                       assVal = DataProcessor.prox_mean(estVal_geo_df, geohashval)
                        assVal = int(assVal)
                else:
-                   assVal = prox_mean(estVal_geo_df, geohashval)
+                   assVal = DataProcessor.prox_mean(estVal_geo_df, geohashval)
                    assVal = int(assVal)
 
                # Last Sale Date
@@ -1271,19 +1266,19 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
                    lastSaleDate = ten_today.strftime('%Y-%m-%d')
 
                # opex
-               opex = prox_mean(opex_geo_df, geohashval)
+               opex = DataProcessor.prox_mean(opex_geo_df, geohashval)
 
                # Avg. Rents 1Br
-               zrent = prox_mean(zrent_geo_df, geohashval)
+               zrent = DataProcessor.prox_mean(zrent_geo_df, geohashval)
 
                # Cap rate
-               cap = prox_mean(cap_geo_df, geohashval)
+               cap = DataProcessor.prox_mean(cap_geo_df, geohashval)
 
                # Median Home Value
-               home = prox_mean(home_geo_df, geohashval)
+               home = DataProcessor.prox_mean(home_geo_df, geohashval)
 
                # Area per unit
-               area = prox_mean(area_geo_df, geohashval)
+               area = DataProcessor.prox_mean(area_geo_df, geohashval)
 
                print(opex, zrent, cap, home, area)
 
@@ -1303,7 +1298,7 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
                if df_cmbs.shape[0] > 0:
 
                    # Median Revenue / Sq.ft / Year
-                   market_price = df_cmbs["Revenue_per_sqft_year"].apply(clean_currency).median()
+                   market_price = df_cmbs["Revenue_per_sqft_year"].apply(DataProcessor.clean_currency).median()
 
                    # Generate Address string
                    addr_cols = ["Address", "City", "State", "Zip_Code"]
@@ -1385,7 +1380,7 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
                    )
 
                # Add POI data layer
-               df_nearby = nearby_places(address, None)
+               df_nearby = DataProcessor.nearby_places(address, None)
 
                # Check if DataFrame was returned
                if isinstance(df_nearby, pd.DataFrame):
@@ -1394,7 +1389,7 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
                   sym_list = []
 
                   for i in df_nearby['type_label']:
-                      typ = sym_dict.get(i)
+                      typ = DataProcessor.sym_dict.get(i)
                       sym_list.append(typ)
 
                   datap.append({
@@ -1418,7 +1413,7 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
                   )
 
 
-               Lat, Long = get_geocodes(address)
+               Lat, Long = DataProcessor.geo_geocodes(address)
 
                layout_lat = Lat
                layout_lon = Long
@@ -1468,7 +1463,7 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
                              # Once the API is live, subject property data will be passed here for modal popup w carousel
                              "customdata": [cdata],
                              "marker": {
-                                 "symbol": sym_dict[proptype],
+                                 "symbol": DataProcessor.sym_dict[proptype],
                                  "size": 28,
                                  "opacity": 0.7,
                                  "color": "rgb(128, 128, 128)"
@@ -1483,7 +1478,7 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
                      "hovermode": "closest",
                      "mapbox": {
 
-                         "accesstoken": MAPBOX_KEY,
+                         "accesstoken": os.environ["MAPBOX_KEY"],
                          "bearing": 0,
                          "center": {
                              "lat": layout_lat,
@@ -1541,10 +1536,10 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
 
             df_cmbs_img = df_cmbs[['Property_Name','Image_dicts']]
 
-            return ({"data": datap, "layout": layout}, {"predicted": price, "market_price": market_price}, listToDict(details), {"df_cmbs": df_cmbs_sub.to_dict('records'), "df_noncmbs": df_noncmbs_sub.to_dict('records')}, df_cmbs_img.to_dict('records'), {"display": "none"}, no_update, no_update)
+            return ({"data": datap, "layout": layout}, {"predicted": price, "market_price": market_price}, DataProcessor.listToDict(details), {"df_cmbs": df_cmbs_sub.to_dict('records'), "df_noncmbs": df_noncmbs_sub.to_dict('records')}, df_cmbs_img.to_dict('records'), {"display": "none"}, no_update, no_update)
         else:
             df_sub = df[['Property_Name','Image_dicts']]
-            return ({"data": datac, "layout": layout}, {"predicted": price, "market_price": market_price}, listToDict(details), no_update, df_sub.to_dict('records'), {"display": "none"}, no_update, no_update)
+            return ({"data": datac, "layout": layout}, {"predicted": price, "market_price": market_price}, DataProcessor.listToDict(details), no_update, df_sub.to_dict('records'), {"display": "none"}, no_update, no_update)
 
     else:
         #PreventUpdate
@@ -1709,11 +1704,11 @@ def update_table(address, proptype, built, units_acq, space_acq, ameneties, n_cl
        df = pd.concat([df_cmbs_v1, df_noncmbs], ignore_index=True)
 
        # Apply formatting
-       df['Most_Recent_Physical_Occupancy'] = df['Most_Recent_Physical_Occupancy'].apply(clean_percent).astype('float')
-       df['EstRevenueMonthly'] = df['EstRevenueMonthly'].apply(clean_currency).astype('float')
-       df['Opex'] = df['Opex'].apply(clean_currency).astype('float')
-       df['Revenue_per_sqft_year'] = df['Revenue_per_sqft_year'].apply(clean_currency).astype('float')
-       df['EstValue'] = df['EstValue'].apply(clean_currency).astype('float')
+       df['Most_Recent_Physical_Occupancy'] = df['Most_Recent_Physical_Occupancy'].apply(DataProcessor.clean_percent).astype('float')
+       df['EstRevenueMonthly'] = df['EstRevenueMonthly'].apply(DataProcessor.clean_currency).astype('float')
+       df['Opex'] = df['Opex'].apply(DataProcessor.clean_currency).astype('float')
+       df['Revenue_per_sqft_year'] = df['Revenue_per_sqft_year'].apply(DataProcessor.clean_currency).astype('float')
+       df['EstValue'] = df['EstValue'].apply(DataProcessor.clean_currency).astype('float')
 
        df.reset_index(inplace = True)
 
@@ -1777,13 +1772,13 @@ def update_table(address, proptype, built, units_acq, space_acq, ameneties, n_cl
        comps_data = df.to_dict("rows")
 
        # Clean up columns to calculate stats
-       #df['Most_Recent_Physical_Occupancy'] = df['Most_Recent_Physical_Occupancy'].apply(clean_percent).astype('float')
+       #df['Most_Recent_Physical_Occupancy'] = df['Most_Recent_Physical_Occupancy'].apply(DataProcessor.clean_percent).astype('float')
 
        df1 = df
 
        # Rent col
        if df1['zrent_median'].isna().sum() != len(df1['zrent_median']):
-           df1['zrent_median'] = df1['zrent_median'].apply(clean_currency).astype(float)
+           df1['zrent_median'] = df1['zrent_median'].apply(DataProcessor.clean_currency).astype(float)
            rent_col = df1[df1['zrent_median'] > 0]
            rent_avg = rent_col['zrent_median'].median()
            rent_avg = "${:,.0f}".format(rent_avg)
@@ -1792,7 +1787,7 @@ def update_table(address, proptype, built, units_acq, space_acq, ameneties, n_cl
 
        # Monthly Revenue
        if df1['EstRevenueMonthly'].isna().sum() != len(df1['EstRevenueMonthly']):
-           df1['EstRevenueMonthly'] = df1['EstRevenueMonthly'].apply(clean_currency).astype(float)
+           df1['EstRevenueMonthly'] = df1['EstRevenueMonthly'].apply(DataProcessor.clean_currency).astype(float)
            revenue_col = df1[df1['EstRevenueMonthly'] > 0]
            revenue_avg = revenue_col['EstRevenueMonthly'].median()
            revenue_avg = "${:,.0f}".format(revenue_avg)
@@ -1801,7 +1796,7 @@ def update_table(address, proptype, built, units_acq, space_acq, ameneties, n_cl
 
        # Physical occupancy
        if df1['Most_Recent_Physical_Occupancy'].isna().sum() != len(df1['Most_Recent_Physical_Occupancy']):
-           df1['Most_Recent_Physical_Occupancy'] = df1['Most_Recent_Physical_Occupancy'].apply(clean_percent).astype(float)
+           df1['Most_Recent_Physical_Occupancy'] = df1['Most_Recent_Physical_Occupancy'].apply(DataProcessor.clean_percent).astype(float)
            occ_col = df1[df1['Most_Recent_Physical_Occupancy'] > 0]
            occ_avg = occ_col['Most_Recent_Physical_Occupancy'].mean()
            occ_avg = "{:,.1f}%".format(occ_avg)
@@ -1810,7 +1805,7 @@ def update_table(address, proptype, built, units_acq, space_acq, ameneties, n_cl
 
        # Format / clean up
        if df1['Opex'].isna().sum() != len(df1['Opex']):
-           df1['Opex'] = df1['Opex'].apply(clean_currency).astype('float')
+           df1['Opex'] = df1['Opex'].apply(DataProcessor.clean_currency).astype('float')
            opex_col = df1[df1['Opex'] > 0]
            opex_avg = opex_col['Opex'].mean()
            opex_avg = "${:,.0f}".format(opex_avg)
@@ -1879,7 +1874,7 @@ def display_popup1(clickData, n_clicks, is_open_c, query_store):
         rent_quantiles = clickData["points"][0]["customdata"][4]
 
         rent_median = clickData["points"][0]["customdata"][5]
-        rent_median = clean_currency(rent_median)
+        rent_median = DataProcessor.clean_currency(rent_median)
 
         try:
             # string to list
@@ -1902,7 +1897,7 @@ def display_popup1(clickData, n_clicks, is_open_c, query_store):
         Distance = clickData["points"][0]["customdata"][12]
 
         # Construct URL for Interactive Streetview Map
-        lat, long = get_geocodes(Address)
+        lat, long = DataProcessor.geo_geocodes(Address)
         streetview_url = "https://www.google.com/maps/embed/v1/streetview?key={}&location={},{}&heading=180&pitch=10&fov=75".format(gmaps_api, lat, long)
 
         # Check dataframe - default view or property search geofilter
@@ -1934,7 +1929,7 @@ def display_popup1(clickData, n_clicks, is_open_c, query_store):
         #
         #                     parts = os.path.split(v)
         #
-        #                     url = create_presigned_url('gmaps-images-6771', 'property_images/{}'.format(parts[len(parts)-1]))
+        #                     url = DataProcessor.create_presigned_url('gmaps-images-6771', 'property_images/{}'.format(parts[len(parts)-1]))
         #
         #                     # Create a list of dicts for carousel
         #                     img_dict1 = {"key": c, "src": url, "img_style": {"width": "300px", "height": "300px"}}
@@ -1952,14 +1947,14 @@ def display_popup1(clickData, n_clicks, is_open_c, query_store):
         #
         #              # Get streetview image
         #
-        #              lat, long = get_geocodes(Address)
-        #              name = streetview(lat, long, 'streetview')
+        #              lat, long = DataProcessor.geo_geocodes(Address)
+        #              name = DataProcessor.streetview(lat, long, 'streetview')
         #
         #              # Construct URL
-        #              url = create_presigned_url('gmaps-images-6771', 'property_images/{}'.format(name))
+        #              url = DataProcessor.create_presigned_url('gmaps-images-6771', 'property_images/{}'.format(name))
         #
         #              if "None" in url:
-        #                  url = create_presigned_url('gmaps-images-6771', 'property_images/no_imagery.png')
+        #                  url = DataProcessor.create_presigned_url('gmaps-images-6771', 'property_images/no_imagery.png')
         #
         #              carousel = dbc.Carousel(
         #                                      items=[
@@ -1972,7 +1967,7 @@ def display_popup1(clickData, n_clicks, is_open_c, query_store):
         #
         #     except Exception as e:
         #         print('Exception', e)
-        #         url = create_presigned_url('gmaps-images-6771', 'property_images/no_imagery.png')
+        #         url = DataProcessor.create_presigned_url('gmaps-images-6771', 'property_images/no_imagery.png')
         #
         #         carousel = dbc.Carousel(
         #                                 items=[
@@ -2085,17 +2080,17 @@ def display_popup2(clickData, n_clicks_sp, is_open_sp, query_store, table_store)
         PropTax = clickData["points"][0]["customdata"][7]
 
         # Get coordinates
-        lat, long = get_geocodes(Address)
+        lat, long = DataProcessor.geo_geocodes(Address)
         streetview_url = "https://www.google.com/maps/embed/v1/streetview?key={}&location={},{}&heading=180&pitch=10&fov=75".format(gmaps_api, lat, long)
 
         # # Get updated name of the streetview image
-        # name = streetview(lat, long, 'streetview')
+        # name = DataProcessor.streetview(lat, long, 'streetview')
         #
         # # Construct URL
-        # url = create_presigned_url('gmaps-images-6771', 'property_images/{}'.format(name))
+        # url = DataProcessor.create_presigned_url('gmaps-images-6771', 'property_images/{}'.format(name))
         #
         # if "None" in url:
-        #     url = create_presigned_url('gmaps-images-6771', 'property_images/no_imagery.png')
+        #     url = DataProcessor.create_presigned_url('gmaps-images-6771', 'property_images/no_imagery.png')
         #
         # carousel = dbc.Carousel(
         #                         items=[
@@ -2110,7 +2105,7 @@ def display_popup2(clickData, n_clicks_sp, is_open_sp, query_store, table_store)
         # Calculate Rents from Comps Table
         if table_store:
             df = pd.DataFrame(table_store)
-            s = df['zrent_median'].apply(clean_currency).astype(float)
+            s = df['zrent_median'].apply(DataProcessor.clean_currency).astype(float)
 
             rmin = s.min()
             rmax = s.max()
@@ -2282,7 +2277,7 @@ def display_popup3(clickData, n_clicks_z, is_open_z, query_store):
         #                )
 
         # Construct URL for Interactive Streetview Map
-        lat, long = get_geocodes(Address)
+        lat, long = DataProcessor.geo_geocodes(Address)
         streetview_url = "https://www.google.com/maps/embed/v1/streetview?key={}&location={},{}&heading=180&pitch=10&fov=75".format(gmaps_api, lat, long)
 
         # formatted for default view (NA) and calculated / post button click and handling of None value

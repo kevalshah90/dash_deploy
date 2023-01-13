@@ -68,8 +68,6 @@ def poi_poly(
     )
 
 
-# Useful function to check whether a Point belongs to a polygon
-
 # Function to find submarket based on lat, long
 
 def market_Lookup(lat, long, geom_dict):

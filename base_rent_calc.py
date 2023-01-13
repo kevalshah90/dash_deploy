@@ -8,7 +8,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder, MinMaxScaler, OrdinalEncoder
 import os
-from funcs import clean_percent, clean_currency
 import sagemaker
 from sagemaker.serializers import CSVSerializer
 from sagemaker.deserializers import CSVDeserializer
@@ -23,7 +22,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import OneHotEncoder, MinMaxScaler, OrdinalEncoder
 import pygeohash as gh
 from geolib import geohash
-from funcs import clean_percent, clean_currency, city_geohash, gen_ids, walkscore
+from funcs import DataProcessor
+#from funcs import clean_currency, clean_percent, city_geohash, DataProcessor.gen_ids, walkscore
 
 # Google maps api key
 import googlemaps
@@ -52,7 +52,7 @@ from sagemaker.local import LocalSession
 import pymysql
 from sqlalchemy import create_engine
 user = 'stroom'
-pwd = 'Stroomrds'
+pwd = 'V6cH2zQ!^1'
 host =  'aa1jp4wsh8skxvw.csl5a9cjrheo.us-west-1.rds.amazonaws.com'
 port = 3306
 database = 'stroom_main'
@@ -146,8 +146,8 @@ def calc_rev(prop_address, yr_built, space, units, assval, opex, taxAmt, taxRate
     prop_loc = (Lat, Long)
 
     # Location characteristics
-    Walk = walkscore(Lat, Long, prop_address, 'walk')
-    Transit = walkscore(Lat, Long, prop_address, 'transit')
+    Walk = DataProcessor.walkscore(Lat, Long, prop_address, 'walk')
+    Transit = DataProcessor.walkscore(Lat, Long, prop_address, 'transit')
 
     # Format date
     if len(lastSaleDate) <= 10:
@@ -271,7 +271,7 @@ def calc_rev(prop_address, yr_built, space, units, assval, opex, taxAmt, taxRate
     if df_raw.shape[0] > 0:
 
         # Add additional cols
-        df_raw['Revenue_per_sqft_month'] = df_raw['Revenue_per_sqft_month'].apply(clean_currency)
+        df_raw['Revenue_per_sqft_month'] = df_raw['Revenue_per_sqft_month'].apply(DataProcessor.clean_currency)
         df_raw['Revenue_per_sqft_year'] = df_raw['Revenue_per_sqft_month'].astype(float) * 12
         df_raw['Revenue_per_sqft_year'] = df_raw['Revenue_per_sqft_year'].apply('${:,.2f}'.format)
 

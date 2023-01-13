@@ -3,22 +3,17 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, login_required
 import sys
 sys.path.append("..") # Adds higher directory to python modules path.
+import os
 from werkzeug.middleware.dispatcher import DispatcherMiddleware
 from werkzeug.serving import run_simple
 from index import application as dashApp
 
-import pymysql
-from sqlalchemy import create_engine
-dbuser = 'stroom'
-pwd = 'Stroomrds'
-host =  'aa1jp4wsh8skxvw.csl5a9cjrheo.us-west-1.rds.amazonaws.com'
-port = 3306
-database = 'stroom_login'
-
 server_auth = Flask(__name__, instance_relative_config=False)
 
+database = 'stroom_login'
+
 server_auth.config['SECRET_KEY'] = 'GXvCqWhRoOuihe5'
-server_auth.config['SQLALCHEMY_DATABASE_URI'] = "mysql+pymysql://{}:{}@{}/{}".format(dbuser,pwd,host,database)
+server_auth.config['SQLALCHEMY_DATABASE_URI'] = "mysql+pymysql://{}:{}@{}/{}".format(os.environ["user"], os.environ["pwd"], os.environ["host"], database)
 
 # Update this for Production
 server_auth.config['TESTING'] = True
@@ -33,6 +28,7 @@ login_manager.login_view = 'auth.login'
 login_manager.init_app(server_auth)
 
 from .models import users, init_db
+
 init_db() # created mysql tables
 
 @login_manager.user_loader
