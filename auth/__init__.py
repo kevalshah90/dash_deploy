@@ -52,9 +52,17 @@ server_auth.register_blueprint(main_blueprint)
 def dashboard():
     return redirect('/dashboard')
 
-app = DispatcherMiddleware(server_auth,
-                           {'/dashboard': dashApp.server})
+# app = DispatcherMiddleware(server_auth,
+#                            {'/dashboard': dashApp.server})
+
+dashApp.init_app(server_auth)
+app = server_auth
+
+server_auth.logger.info('********Starting server********')
+
 
 # Change to port 80 to match the instance for AWS EB Environment
+
+# the following is run when python -m auth is run from the command line not when the app is run from gunicorn
 if __name__ == '__main__':
     run_simple('0.0.0.0', os.environ.get('DEBUG_PORT', 80), app, use_reloader=True, use_debugger=True)
