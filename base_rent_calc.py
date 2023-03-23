@@ -14,7 +14,6 @@ from sagemaker.deserializers import CSVDeserializer
 from datetime import datetime, timedelta, date
 from dateutil.relativedelta import relativedelta
 import matplotlib.pyplot as plt
-import os
 import random
 import string
 import geopy.distance
@@ -22,20 +21,18 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import OneHotEncoder, MinMaxScaler, OrdinalEncoder
 import pygeohash as gh
 from geolib import geohash
-from funcs import DataProcessor
-#from funcs import clean_currency, clean_percent, city_geohash, DataProcessor.gen_ids, walkscore
+from utils import DataProcessor
+from config import *
+#from utils import clean_currency, clean_percent, city_geohash, DataProcessor.gen_ids, walkscore
 
 # Google maps api key
 import googlemaps
-gmaps = googlemaps.Client(key='AIzaSyC0XCzdNwzI26ad9XXgwFRn2s7HrCWnCOk')
+gmaps = googlemaps.Client(key = os.environ['gkey'])
 
 # Mapbox API
 import mapbox
-from mapbox import Geocoder
-MAPBOX_ACCESS_TOKEN='pk.eyJ1Ijoic3Ryb29tIiwiYSI6ImNsNWVnMmpueTEwejQza252ZnN4Zm02bG4ifQ.SMGyKFikz4uDDqN6JvEq7Q'
-# Must be a public token, starting with `pk`
-token = MAPBOX_ACCESS_TOKEN
-geocoder = mapbox.Geocoder(access_token=token)
+token = os.environ["MAPBOX_KEY"]
+Geocoder = mapbox.Geocoder(access_token=token)
 
 # AWS SageMaker
 import boto3
@@ -49,17 +46,9 @@ from sagemaker.session import Session
 from sagemaker.local import LocalSession
 
 # mysql connection
-import pymysql
-from sqlalchemy import create_engine
-user = 'stroom'
-pwd = 'V6cH2zQ!^1'
-host =  'aa1jp4wsh8skxvw.csl5a9cjrheo.us-west-1.rds.amazonaws.com'
-port = 3306
+from sqlalchemy import create_engine, text
 database = 'stroom_main'
-engine = create_engine("mysql+pymysql://{}:{}@{}/{}".format(user,pwd,host,database))
-con = engine.connect()
-
-# Read ML data
+engine = create_engine("mysql://{}:{}@{}/{}".format(os.environ["user"], os.environ["pwd"], os.environ["host"], database))
 con = engine.connect()
 
 # query = '''
@@ -67,7 +56,7 @@ con = engine.connect()
 #         FROM stroom_main.df_raw_july
 #         '''
 #
-# df_ml = pd.read_sql(query, con)
+# df_ml = pd.read_sql(text(query), con)
 
 # Construct opex / sqft column
 # df_ml['opex_sqft_month'] = (df_ml['Most_Recent_Operating_Expenses'].apply(clean_currency).astype(float)/df_ml['EstRentableArea'].astype(float))/12
@@ -260,7 +249,7 @@ def calc_rev(prop_address, yr_built, space, units, assval, opex, taxAmt, taxRate
                 where st_distance_sphere(Point({},{}), coords) <= {};
                 '''.format(Long, Lat, radius_cmbs)
 
-        df_raw = pd.read_sql(query, con)
+        df_raw = pd.read_sql(text(query), con)
 
         # if no comps found, expand radius
         if df_raw.shape[0] == 0:
@@ -340,7 +329,7 @@ def calc_rev(prop_address, yr_built, space, units, assval, opex, taxAmt, taxRate
 
                                     '''.format(state, Long, Lat, radius_noncmbs)
 
-                            df_comps = pd.read_sql(query, con)
+                            df_comps = pd.read_sql(text(query), con)
 
                             # If no comps result, expand radius
                             if df_comps.shape[0] == 0:

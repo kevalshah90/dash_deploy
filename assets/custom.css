@@ -632,21 +632,28 @@ div#overlay {
 }
 
 .row-1-deal {
-  height: 5em;
+  height: 6em;
   width: 100%;
-  margin-left: 0px;
+  margin-left: 2px;
+  margin-right: 10em;
 }
 
-.row-prop-count {
-  float: right;
+.row-2-deal {
+  /*float: right;*/
+  height: 6em;
+  width: 100%;
+  margin-left: 2px;
   margin-right: 10em;
 }
 
 .row-map-deal {
-  margin-top: 30px;
+  margin-top: 3em;
+  width: 100%;
+  margin-left: 2px;
+  margin-right: 10em;
 }
 
-.buy-box {
+.deals-labels {
   font-weight: bold;
 }
 

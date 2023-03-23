@@ -22,7 +22,7 @@ from scipy.stats import poisson
 from statistics import mean
 from natural_vac import reg_vacancy
 from draw_polygon import market_Lookup
-from funcs import DataProcessor
+from utils import DataProcessor
 from config import *
 from dash.exceptions import PreventUpdate
 from sklearn.preprocessing import MinMaxScaler

@@ -9,17 +9,23 @@ env_var_dict = {
 
                 # db
                 'user':'stroom',
-                'pwd':'V6cH2zQ!^1',
+                'pwd':'$sSnbFaqViFG9RAbo:2g8uEV7HXU',
                 'host':'aa1jp4wsh8skxvw.csl5a9cjrheo.us-west-1.rds.amazonaws.com',
                 'port':'3306',
 
                 # aws
                 'aws_access_key_id':'AKIA2MQCGH6RW7TE3UG2',
-                'aws_secret_access_key':'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'
+                'aws_secret_access_key':'4nZX0wfqBgR7AEkbmEnDNL//eiwqkSkrrIw8MyYb',
+
+                # flask
+                'flask-port-docker': 5000,
+                'flask-port-host': 8000
                }
 
 
 # google maps api key
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"]="stroom-data-exploration-ebf3ef8e9bf0.json"
+
 import googlemaps
 gmaps = googlemaps.Client(key = env_var_dict['gkey'])
 

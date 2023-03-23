@@ -26,7 +26,7 @@ from dash.dash import no_update
 from dash.exceptions import PreventUpdate
 from base_rent_calc import calc_rev
 from handle_images import getPlace_details
-from funcs import DataProcessor
+from utils import DataProcessor
 from draw_polygon import poi_poly
 from sklearn.neighbors import BallTree
 from parse import parse_contents
@@ -51,11 +51,10 @@ token = os.environ["MAPBOX_KEY"]
 Geocoder = mapbox.Geocoder(access_token = token)
 
 # mysql connection
-import pymysql
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 
 database = 'stroom_main'
-engine = create_engine("mysql+pymysql://{}:{}@{}/{}".format(os.environ["user"], os.environ["pwd"], os.environ["host"], database))
+engine = create_engine("mysql://{}:{}@{}/{}".format(os.environ["user"], os.environ["pwd"], os.environ["host"], database))
 
 con = engine.connect()
 
@@ -69,7 +68,7 @@ query = '''
         LIMIT 25
         '''
 
-df = pd.read_sql(query, con)
+df = pd.read_sql(text(query), con)
 
 con.close()
 
@@ -765,7 +764,7 @@ def autopopulate_propdetails(address, is_open):
                 where st_distance_sphere(Point({},{}), coords) <= {};
                 '''.format(geojson['lng'], geojson['lat'], 193)
 
-        df_mf = pd.read_sql(query, con)
+        df_mf = pd.read_sql(text(query), con)
 
         con.close()
 
@@ -1022,7 +1021,7 @@ def update_graph(address, proptype, built, units_acq, space_acq, ameneties, n_cl
                    WHERE st_distance_sphere(Point({},{}), coords) <= {};
                    '''.format(geojson['lng'], geojson['lat'], 10*1609)
 
-           df_mf = pd.read_sql(query, con)
+           df_mf = pd.read_sql(text(query), con)
 
            con.close()
 

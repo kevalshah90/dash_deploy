@@ -44,7 +44,7 @@ s3_client = boto3.client('s3',
                          aws_secret_access_key=os.environ['aws_secret_access_key'])
 
 # Read SF Multi-Family data
-LeaseComp_sf_la_mf = pd.read_csv(os.getcwd() + "/data/df_raw_v1_feb.csv")
+#LeaseComp_sf_la_mf = pd.read_csv(os.getcwd() + "/data/df_raw_v1_feb.csv")
 
 
 

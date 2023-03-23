@@ -13,7 +13,7 @@ server_auth = Flask(__name__, instance_relative_config=False)
 database = 'stroom_login'
 
 server_auth.config['SECRET_KEY'] = 'GXvCqWhRoOuihe5'
-server_auth.config['SQLALCHEMY_DATABASE_URI'] = "mysql+pymysql://{}:{}@{}/{}".format(os.environ["user"], os.environ["pwd"], os.environ["host"], database)
+server_auth.config['SQLALCHEMY_DATABASE_URI'] = "mysql://{}:{}@{}/{}".format(os.environ["user"], os.environ["pwd"], os.environ["host"], database)
 
 # Update this for Production
 server_auth.config['TESTING'] = True
@@ -58,4 +58,4 @@ app = DispatcherMiddleware(server_auth,
 
 # Change to port 80 to match the instance for AWS EB Environment
 if __name__ == '__main__':
-    run_simple('0.0.0.0', 80, app, use_reloader=True, use_debugger=True)
+    run_simple('0.0.0.0', os.environ.get('DEBUG_PORT', 80), app, use_reloader=True, use_debugger=True)

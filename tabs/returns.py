@@ -19,7 +19,7 @@ from collections import defaultdict
 from dash.dash import no_update
 import json
 import plotly.io as pio
-from funcs import DataProcessor
+from utils import DataProcessor
 from config import *
 from decimal import Decimal
 import re
@@ -37,11 +37,10 @@ token = os.environ["MAPBOX_KEY"]
 geocoder = mapbox.Geocoder(access_token=token)
 
 # mysql connection
-import pymysql
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 
 database = 'stroom_main'
-engine = create_engine("mysql+pymysql://{}:{}@{}/{}".format(os.environ["user"], os.environ["pwd"], os.environ["host"], database))
+engine = create_engine("mysql://{}:{}@{}/{}".format(os.environ["user"], os.environ["pwd"], os.environ["host"], database))
 con = engine.connect()
 
 layout = html.Div([
@@ -445,7 +444,7 @@ def populate_fields(dummy, modal_store):
 
             '''.format(Long, Lat, 1609*5)
 
-    df_rg = pd.read_sql(query, con)
+    df_rg = pd.read_sql(text(query), con)
 
     if df_rg.shape[0] > 0:
 

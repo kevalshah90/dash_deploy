@@ -28,22 +28,22 @@ from dash.dash import no_update
 from dash.exceptions import PreventUpdate
 import io
 from urllib.request import urlopen
-from funcs import DataProcessor
+from utils import DataProcessor
 from config import *
 
-# # US Census libraries and API key
+# US Census libraries and API key
 import censusgeocode as cg
 from census import Census
 from us import states
 c = Census(os.environ["ckey"])
 
-# # AWS credentials
+# AWS credentials
 import boto3
 aws_id = os.environ['aws_access_key_id']
 aws_secret = os.environ['aws_secret_access_key']
 s3 = boto3.client('s3')
 
-# # Google Maps API key
+# Google Maps API key
 import googlemaps
 gmaps = googlemaps.Client(key = os.environ['gkey'])
 
@@ -52,11 +52,10 @@ token = os.environ["MAPBOX_KEY"]
 Geocoder = mapbox.Geocoder(access_token=token)
 
 # mysql connection
-import pymysql
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 
 database = 'stroom_main'
-engine = create_engine("mysql+pymysql://{}:{}@{}/{}".format(os.environ["user"], os.environ["pwd"], os.environ["host"], database))
+engine = create_engine("mysql://{}:{}@{}/{}".format(os.environ["user"], os.environ["pwd"], os.environ["host"], database))
 
 #Query GeoData
 try:
@@ -80,7 +79,7 @@ try:
             where MSA IN {}
             '''.format(msa)
 
-    df_market = pd.read_sql(query, con)
+    df_market = pd.read_sql(text(query), con)
     print('sql connection closed')
     con.close()
 
@@ -92,7 +91,7 @@ try:
             where MSA IN {}
             '''.format(msa)
 
-    df_loan = pd.read_sql(query, con)
+    df_loan = pd.read_sql(text(query), con)
 
     con.close()
 
@@ -110,7 +109,7 @@ layout = html.Div([
 
                    dbc.Row([
 
-                        dbc.Label("Buy Box", className = "buy-box"),
+                        dbc.Label("Buy Box", className = "deals-labels"),
 
                         dbc.InputGroup(
                             [
@@ -137,6 +136,7 @@ layout = html.Div([
                          className="market-deal-style",
 
                         ),
+
 
                         # Upside
                         dbc.InputGroup(
@@ -212,6 +212,7 @@ layout = html.Div([
                             [
 
                                 dbc.InputGroupText("Cap Rate (%)"),
+
                                 dbc.Input(
                                           id="cap-rate-min",
                                           persistence=True,
@@ -219,6 +220,7 @@ layout = html.Div([
                                           placeholder="Min",
                                           style={"height":"44px"}
                                          ),
+
                                 dbc.Input(
                                           id="cap-rate-max",
                                           persistence=True,
@@ -259,9 +261,31 @@ layout = html.Div([
 
                    dbc.Row([
 
-                                dbc.Label(id="prop_count", style={"float":"right", "color":"black", "font-weight": "bold"}),
+                                 # Search property
+                                dbc.InputGroup(
+                                        [
 
-                           ], className="row-prop-count"),
+                                            dbc.Label("Address", className = "deals-labels"),
+
+                                            dcc.Input(id="address_autocomplete_deals",
+                                                    persistence=True,
+                                                    persistence_type="memory",
+                                                    required=True,
+                                                    style={"width":"72%"}),
+
+                                            dcc.Dropdown(id="address_dropdown_deals",
+                                                        persistence=True,
+                                                        persistence_type="memory",
+                                                        placeholder="Address Suggestions",
+                                                        style={"width":"95%", "display":"inline-block", "font-size" : "70%", "height": "5em!important"})
+
+                                        ],
+                                        style={"margin-top":"0px", "width": "25%", "float": "left", "margin-right":"6em"},
+                                ),  
+
+                                dbc.Label(id="prop_count", style={"float":"right", "color":"black", "font-weight": "bold", "margin-left":"43em"}),
+
+                           ], className="row-2-deal"),
 
 
                    dbc.Row(
@@ -509,7 +533,7 @@ layout = html.Div([
 
                     ], className="row-map-deal"),
 
-                    html.Div(id="dummy-div"),
+                    html.Div(id="dummy-div-1"),
 
                     dbc.Row([
 
@@ -592,6 +616,53 @@ layout = html.Div([
 
 # Callbacks
 # Update map graph
+
+# Property address autocomplete
+@application.callback(Output("address_dropdown_deals", "options"),
+                     [Input("address_autocomplete_deals", "value")])
+def autocomplete_address(value):
+
+    if value and len(value) >= 8:
+
+        addr = {}
+
+        # Call mapbox API and limit Autocomplete address suggestions
+        ret_obj = Geocoder.forward(value, lon=-122.436029586314, lat=37.7588531529652, limit=3, country=["us"])
+        response = ret_obj.json()
+
+        for i in range(len(response["features"])):
+
+            addr["res{}".format(i)] = response["features"][i]["place_name"]
+
+        if len(addr) == 1:
+
+            return [{"label": addr["res0"], "value": addr["res0"]}]
+
+        if len(addr) == 2:
+
+            return [{"label": addr["res0"], "value": addr["res0"]},
+                    {"label": addr["res1"], "value": addr["res1"]}]
+
+        if len(addr) == 3:
+
+            return [{"label": addr["res0"], "value": addr["res0"]},
+                    {"label": addr["res1"], "value": addr["res1"]},
+                    {"label": addr["res2"], "value": addr["res2"]}]
+
+    else:
+
+        return (no_update)
+
+
+
+# Set input value to the one selected by dropdown.
+@application.callback(Output("address_autocomplete_deals", "value"),
+                      [Input("address_dropdown_deals", "value")]
+                     )
+def resetInput(address):
+
+    return address
+
 
 @application.callback([
 
@@ -828,7 +899,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                 where st_distance_sphere(Point({},{}), coords) <= {};
                 '''.format(coords[1], coords[0], 1609*10)
 
-        df_msa = pd.read_sql(query, con)
+        df_msa = pd.read_sql(text(query), con)
 
         con.close()
 
@@ -925,7 +996,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
         #         HAVING st_distance_sphere(Point({},{}), ST_Centroid(geometry)) <= {};
         #         '''.format(coords[1], coords[0], 1609*25)
         #
-        # df_rg = pd.read_sql(query, con)
+        # df_rg = pd.read_sql(text(query), con)
         #
         # # Spatial Join
         #
@@ -1085,7 +1156,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                         '''.format(coords[1], coords[0], 1609*25)
 
                 # To pandas
-                df_rg = pd.read_sql(query, con)
+                df_rg = pd.read_sql(text(query), con)
 
                 con.close()
 
@@ -1119,7 +1190,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 
                 con = engine.connect()
 
-                # Query rental growth data
+                # Query rental growth volatility data
                 query = '''
                         select MsaName, zip_code, STD(pct_change) AS std_rent_growth, ST_AsText(geometry) as geom
                         from stroom_main.gdf_rent_growth_july
@@ -1128,7 +1199,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                         '''.format(coords[1], coords[0], 1609*25)
 
                 # To panads
-                df_rg = pd.read_sql(query, con)
+                df_rg = pd.read_sql(text(query), con)
 
                 con.close()
 
@@ -1170,7 +1241,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                         '''.format(coords[1], coords[0], 1609*250)
 
                 # To pandas
-                df_job = pd.read_sql(query, con)
+                df_job = pd.read_sql(text(query), con)
 
                 con.close()
 
@@ -1243,7 +1314,9 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                         where st_distance_sphere(Point({},{}), geohash_center) <= {};
                         '''.format(coords[1], coords[0], 1609*30)
 
-                df_econ_vitality = pd.read_sql(query, con)
+                print("Econ Vitality Query:", query)
+
+                df_econ_vitality = pd.read_sql(text(query), con)
 
                 con.close()
 
@@ -1315,7 +1388,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                     '''.format(coords[1], coords[0], 1609*1.5)
 
             # To panads
-            df_construct = pd.read_sql(query, con)
+            df_construct = pd.read_sql(text(query), con)
 
             con.close()
 
@@ -1398,7 +1471,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                     where MSA IN ('{}')
                     '''.format(market)
 
-            dfc = pd.read_sql(query, con)
+            dfc = pd.read_sql(text(query), con)
 
             con.close()
 
@@ -1426,7 +1499,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                     where MSA IN ('{}');
                     '''.format(market)
 
-            dfc = pd.read_sql(query, con)
+            dfc = pd.read_sql(text(query), con)
 
             con.close()
 
@@ -1454,7 +1527,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                     where MSA IN ('{}');
                     '''.format(market)
 
-            dfc = pd.read_sql(query, con)
+            dfc = pd.read_sql(text(query), con)
 
             con.close()
 
@@ -1483,7 +1556,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                     where MSA IN ('{}');
                     '''.format(market)
 
-            dfc = pd.read_sql(query, con)
+            dfc = pd.read_sql(text(query), con)
 
             con.close()
 
@@ -1512,7 +1585,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                     where MSA IN ('{}');
                     '''.format(market)
 
-            dfc = pd.read_sql(query, con)
+            dfc = pd.read_sql(text(query), con)
 
             con.close()
 
@@ -1540,7 +1613,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                     where MSA IN ('{}');
                     '''.format(market)
 
-            dfc = pd.read_sql(query, con)
+            dfc = pd.read_sql(text(query), con)
 
             con.close()
 
@@ -1568,7 +1641,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                     where MSA IN ('{}');
                     '''.format(market)
 
-            dfc = pd.read_sql(query, con)
+            dfc = pd.read_sql(text(query), con)
 
             con.close()
 
@@ -1596,7 +1669,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                     where MSA IN ('{}');
                     '''.format(market)
 
-            dfc = pd.read_sql(query, con)
+            dfc = pd.read_sql(text(query), con)
 
             con.close()
 
@@ -1624,7 +1697,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                     where MSA IN ('{}');
                     '''.format(market)
 
-            dfc = pd.read_sql(query, con)
+            dfc = pd.read_sql(text(query), con)
 
             con.close()
 
@@ -1652,7 +1725,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                     where MSA IN ('{}');
                     '''.format(market)
 
-            dfc = pd.read_sql(query, con)
+            dfc = pd.read_sql(text(query), con)
 
             con.close()
 
@@ -1683,7 +1756,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
                         where MSA IN ('{}');
                         '''.format(market)
 
-                dfc_tr = pd.read_sql(query, con)
+                dfc_tr = pd.read_sql(text(query), con)
 
                 con.close()
 
@@ -2058,6 +2131,7 @@ def update_map_deal(market, upside_dropdown, algo_switch, overlay, demo_dropdown
 # Reset dropdowns upon market change OR clerance
 @application.callback(
                         [
+
                             Output("upside-deal", "value"),
                             Output("upside-deal", "disabled"),
 
