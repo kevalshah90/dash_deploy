@@ -21,15 +21,14 @@ server_auth.config['TESTING'] = True
 # init SQLAlchemy so we can use it later in our models
 db = SQLAlchemy(server_auth)
 
-db.init_app(server_auth)
-
 login_manager = LoginManager()
 login_manager.login_view = 'auth.login'
 login_manager.init_app(server_auth)
 
 from .models import users, init_db
 
-init_db() # created mysql tables
+with server_auth.app_context():
+    init_db()
 
 @login_manager.user_loader
 def load_user(user_id):
