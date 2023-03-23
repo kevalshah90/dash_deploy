@@ -1,0 +1,15 @@
+version: "3" 
+
+services: 
+  app:
+    image: stroom-image1 
+    container_name: stroom-cont1
+    volumes:
+      - .:/app
+    ports:
+      - 8000:8000
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=./stroom-data-exploration-ebf3ef8e9bf0.json
+      - GOOGLE_CLOUD_PROJECT=stroom-data-exploration
+      - DEBUG_PORT=8000
+    command: python -m auth.__init__
