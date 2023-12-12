@@ -1,21 +1,21 @@
 import os
 
 env_var_dict = {
-                'MAPBOX_KEY':'pk.eyJ1Ijoic3Ryb29tIiwiYSI6ImNsNWVnMmpueTEwejQza252ZnN4Zm02bG4ifQ.SMGyKFikz4uDDqN6JvEq7Q',
-                'gkey':'AIzaSyC0XCzdNwzI26ad9XXgwFRn2s7HrCWnCOk',
+                'MAPBOX_KEY':'xxx',
+                'gkey':'xxx',
                 'GCLOUD_PROJECT':'stroom-data-exploration',
-                'walk_api_key':'5ddeb512e4ac8046b46eca65a39ff9c5',
-                'ckey':'71a69d38e3f63242eca7e63b8de1019b6e9f5912',
+                'walk_api_key':'xxx',
+                'ckey':'xxx',
 
                 # db
                 'user':'stroom',
-                'pwd':'$sSnbFaqViFG9RAbo:2g8uEV7HXU',
+                'pwd':'xxx',
                 'host':'aa1jp4wsh8skxvw.csl5a9cjrheo.us-west-1.rds.amazonaws.com',
                 'port':'3306',
 
                 # aws
-                'aws_access_key_id':'AKIA2MQCGH6RW7TE3UG2',
-                'aws_secret_access_key':'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',
+                'aws_access_key_id':'xxx',
+                'aws_secret_access_key':'xxx',
 
                 # flask
                 'flask-port-docker': 5000,
@@ -43,7 +43,7 @@ walkscore_api = WalkScoreAPI(api_key = env_var_dict['walk_api_key'])
 # import censusgeocode as cg
 # from census import Census
 # from us import states
-# ckey = "71a69d38e3f63242eca7e63b8de1019b6e9f5912"
+# ckey = "xxx"
 # c = Census(ckey)
 
 os.environ["MAPBOX_KEY"] = env_var_dict['MAPBOX_KEY']
